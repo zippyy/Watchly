@@ -535,7 +535,6 @@ def test_masked_provider_tokens_are_never_presented_to_the_provider(monkeypatch)
     assert set(stored["identities"]) == {"stremio", "trakt", "simkl"}
 
 
-
 def test_nuvio_only_account_is_profile_scoped_and_reused(monkeypatch):
     fake = setup_fakes(monkeypatch)
     service = AuthService()
