@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.14.2 - 2026-09-21
+
+### Added
+
+- Nuvio is now a first-class watch-history source alongside Stremio, Trakt, and Simkl.
+- The Accounts page can sign in directly to Nuvio, select a Nuvio profile, and use that profile's synced watched items and playback progress to build Watchly recommendations.
+- Nuvio access/refresh tokens are encrypted at rest; the user's Nuvio password is sent directly from the browser to Nuvio and is never submitted to Watchly.
+- Nuvio sessions are refreshed automatically when they expire.
+
+### Changed
+
+- Nuvio episode-level watched rows are collapsed to their parent series before scoring so normal episode progression is not mistaken for a series rewatch.
+- Stremio logout no longer visually disconnects independently connected Trakt, Simkl, or Nuvio accounts.
+- README privacy and integration documentation now distinguishes Nuvio Collection installation from Nuvio history access.
+
 ## 1.14.0 - 2026-09-01
 
 ### Added
