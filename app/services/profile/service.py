@@ -562,6 +562,10 @@ class ProfileService:
         if not app_settings.SIMKL_CLIENT_ID:
             return None
 
+        initial_credentials = await token_store.get_user_data(token)
+        initial_settings = (initial_credentials or {}).get("settings") or {}
+        initial_access = str(initial_settings.get("simkl_access_token") or "")
+
         client = await redis_service.get_client()
         lock_key = f"watchly:simkl-refresh:{token}"
         lock_value = uuid.uuid4().hex
@@ -575,9 +579,9 @@ class ProfileService:
                 await asyncio.sleep(0.15)
                 credentials = await token_store.get_user_data(token)
                 settings_dict = (credentials or {}).get("settings") or {}
-                current = settings_dict.get("simkl_access_token")
-                if current and current != settings_dict.get("_simkl_refresh_previous_access"):
-                    return str(current)
+                current = str(settings_dict.get("simkl_access_token") or "")
+                if current and current != initial_access:
+                    return current
             logger.warning(f"[{token[:8]}...] Timed out waiting for concurrent Simkl refresh.")
             return None
 
@@ -622,7 +626,10 @@ class ProfileService:
             # Delete only our own lock; do not remove a successor's lock if ours
             # expired and another worker acquired it.
             try:
-                if await client.get(lock_key) == lock_value:
+                current_lock = await client.get(lock_key)
+                if isinstance(current_lock, bytes):
+                    current_lock = current_lock.decode("utf-8", errors="ignore")
+                if current_lock == lock_value:
                     await client.delete(lock_key)
             except Exception:
                 pass
