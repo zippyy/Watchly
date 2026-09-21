@@ -3,22 +3,23 @@
 <div align="center">
 
 <!-- Premium Badge Collection -->
-[![Version](https://img.shields.io/github/v/release/timilsinabimal/watchly?style=for-the-badge&logo=semver&color=6366f1)](https://github.com/timilsinabimal/watchly/releases)
+[![Version](https://img.shields.io/github/v/release/zippyy/Watchly?style=for-the-badge&logo=semver&color=6366f1)](https://github.com/zippyy/Watchly/releases)
 [![License](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/timilsinabimal/watchly?style=for-the-badge&color=f59e0b&logo=github)](https://github.com/timilsinabimal/watchly/stargazers)
+[![GitHub Stars](https://img.shields.io/github/stars/zippyy/Watchly?style=for-the-badge&color=f59e0b&logo=github)](https://github.com/zippyy/Watchly/stargazers)
 
 </div>
 <br/>
 
-**Watchly** is a Stremio catalog addon that fills your Stremio home with personalized movie and series recommendations built from your own watch history. It reads what you've watched, rated, and loved — from **Stremio, Trakt, or Simkl** — builds a numerical taste profile from it, and serves a set of recommendation rows ("Top Picks for You", "Because you watched …", genre and keyword catalogs, and more) using metadata from [TMDB](https://www.themoviedb.org/).
+**Watchly** is a self-hosted **Stremio and Nuvio** recommendation addon that builds personalized movie and series recommendations from your own watch history. It reads what you've watched, rated, and loved — from **Stremio, Trakt, or Simkl** — builds a numerical taste profile from it, and serves recommendation rows such as "Top Picks for You", "Because you watched …", genre and keyword catalogs, creator-based picks, and more using metadata from [TMDB](https://www.themoviedb.org/).
 
-Everything is configured through a web page; you paste the resulting manifest URL into Stremio once, and the catalogs keep refreshing in the background.
+For Stremio, Watchly behaves like a normal catalog addon. For **Nuvio**, this fork adds **Collection Mode**: the installer creates one native **For You** Collection containing Watchly's recommendation folders instead of cluttering the Nuvio home screen with separate Watchly catalog rows. Everything is configured through the same web page and continues refreshing from your saved Watchly profile in the background.
 
 ## Table of contents
 
 - [Features](#features)
 - [How it works](#how-it-works)
 - [Catalogs](#catalogs)
+- [Nuvio Collection Mode](#nuvio-collection-mode)
 - [Watch history sources](#watch-history-sources)
 - [Personalization](#personalization)
 - [Screenshots](#screenshots)
@@ -37,6 +38,7 @@ Everything is configured through a web page; you paste the resulting manifest UR
 - **Personalized recommendations** — a taste profile (top genres, keywords, directors, cast, eras, countries, runtime) is built from your history and drives every catalog row.
 - **Three history sources** — use your **Stremio** library, your **Trakt** account, or your **Simkl** account. Ratings, watches, loves, and rewatches are all understood.
 - **Multiple catalog types** — Top Picks, "Because you watched/loved", dynamic genre & keyword rows, recommendations from your recurring directors and actors, and "based on everything you loved/liked".
+- **Native Nuvio Collection Mode** — installing through the Watchly configure page creates/updates a single native **For You** Collection in Nuvio while keeping Watchly's backing catalogs out of normal Home/Catalog Order rows.
 - **Fine-grained personalization** — discovery style (mainstream → hidden gems), release-year window, excluded genres (separately for movies and series), display language, and per-catalog enable/rename/shuffle controls.
 - **Poster ratings overlay** — optionally overlay IMDb/TMDb-style ratings on posters via [RatingPosterDB](https://ratingposterdb.com/), Top Posters, or a custom template.
 - **Bring your own keys** — supply your own TMDB, Simkl, or Gemini API keys, or rely on the server's.
@@ -49,7 +51,7 @@ Everything is configured through a web page; you paste the resulting manifest UR
 1. You open the `/configure` page and connect a history source (Stremio login, or Trakt/Simkl via OAuth). Your credentials are encrypted and stored in Redis under a short opaque **token**. That token is embedded in your personal manifest URL.
 2. Watchly fetches your watch history from the configured source and converts it into a source-agnostic library — ratings ≥ 9 count as *loved*, 7–8.9 as *liked*, the rest as *watched*.
 3. From that library it builds a **taste profile**: a numerical fingerprint of your preferences across genres, keywords, people, eras, countries, and runtime.
-4. When Stremio requests a catalog, Watchly routes the request to the matching recommendation engine, pulls candidates from TMDB (and Simkl where available), scores them against your profile, caps them for diversity, enriches them with metadata and (optionally) poster ratings, translates titles to your language, and returns a standard Stremio catalog.
+4. When Stremio or Nuvio requests a Watchly catalog, Watchly routes the request to the matching recommendation engine, pulls candidates from TMDB (and Simkl where available), scores them against your profile, caps them for diversity, enriches them with metadata and (optionally) poster ratings, translates titles to your language, and returns standard Stremio-compatible catalog data. Nuvio Collection Mode uses those same catalog endpoints as native Collection sources.
 
 Each user's state is keyed entirely on their token. You can switch history sources at any time; the library and profile are rebuilt from the new source.
 
@@ -65,6 +67,26 @@ You choose which of these to enable on the configure page. Each can be toggled p
 | **From your favourite Creators** | `watchly.creators` | Recommendations from directors and lead actors who recur across multiple items in your library — not one-offs. |
 | **Based on what you loved** | `watchly.all.loved` | Recommendations drawn from your entire set of loved items. |
 | **Based on what you liked** | `watchly.liked.all` | Recommendations drawn from your entire set of liked items. |
+
+## Nuvio Collection Mode
+
+This fork includes a Nuvio-specific installation mode that presents Watchly as a native Nuvio Collection instead of a group of ordinary Home rows.
+
+When you click **Install on Nuvio** from the Watchly configure page, Watchly:
+
+1. Signs in directly to Nuvio from your browser and lets you choose a Nuvio profile.
+2. Installs the Nuvio-specific Watchly manifest at `/{token}/nuvio/manifest.json`.
+3. Marks Watchly's backing catalogs as search-only so they do not also appear as separate Nuvio Home/Catalog Order rows.
+4. Pulls the profile's existing Collections, adds or replaces only the deterministic `watchly-for-you` Collection, and syncs the merged Collection list back to Nuvio.
+5. Reuses Watchly's normal recommendation engines through `/{token}/nuvio/catalog/...` aliases, so recommendation generation stays identical to the standard Stremio addon.
+
+The resulting Collection is titled **For You** and is built from the recommendation catalogs you enabled in Watchly. Stable movie/series rows such as **Top Picks for You** are combined into one folder with Movie and Series tabs, while dynamic rows such as **Because you watched/loved** and generated themes remain separate when their names or seed data differ.
+
+Re-running **Install on Nuvio** is safe: the existing `watchly-for-you` Collection is updated instead of duplicated, and unrelated Nuvio Collections are preserved. Existing standard Watchly installs on that Nuvio profile are upgraded in place to Collection Mode.
+
+> **Privacy:** Nuvio credentials and session tokens are sent directly from the browser to Nuvio's own Supabase backend. They are not sent to or stored by the Watchly server.
+
+The regular `/{token}/manifest.json` and `/{token}/catalog/...` routes remain unchanged for Stremio and conventional addon installs.
 
 ## Watch history sources
 
@@ -110,7 +132,7 @@ Docker is the recommended way to self-host. Watchly requires a **Redis** instanc
          - redis_data:/data
 
      watchly:
-       image: ghcr.io/timilsinabimal/watchly:latest
+       image: ghcr.io/zippyy/Watchly:latest
        container_name: watchly
        restart: unless-stopped
        ports:
@@ -151,7 +173,9 @@ Docker is the recommended way to self-host. Watchly requires a **Redis** instanc
    ```
 
 4. **Configure and install:**
-   Open `http://localhost:8000/configure` (or your `HOST_NAME`), connect a history source, pick your catalogs, and paste the generated manifest URL into Stremio.
+   Open `http://localhost:8000/configure` (or your `HOST_NAME`), connect a history source, and pick your catalogs.
+   - **Nuvio:** click **Install on Nuvio** to install/update the native **For You** Collection.
+   - **Stremio:** use the generated standard manifest URL as usual.
 
 ### Unraid
 
@@ -159,8 +183,8 @@ A Community Applications-style template lives at [`unraid/watchly.xml`](unraid/w
 
 1. Install **Redis** from Community Applications (any Redis container works).
 2. On the **Docker** tab, click **Add Container**, switch to advanced view, and set the template URL to
-   `https://raw.githubusercontent.com/TimilsinaBimal/Watchly/main/unraid/watchly.xml` — or add
-   `https://github.com/TimilsinaBimal/Watchly` under *Template Repositories* and pick **Watchly** from the template list.
+   `https://raw.githubusercontent.com/zippyy/Watchly/main/unraid/watchly.xml` — or add
+   `https://github.com/zippyy/Watchly` under *Template Repositories* and pick **Watchly** from the template list.
 3. Fill in the required fields: TMDB API key, a long random token salt, the Redis URL from step 1
    (e.g. `redis://YOUR-UNRAID-IP:6379/0`), and the host name your Stremio clients will reach the addon on.
 4. Start the container and open the WebUI to configure your catalogs.
@@ -226,7 +250,7 @@ Dependencies are managed with [uv](https://github.com/astral-sh/uv); a `requirem
 
 ```bash
 # Clone
-git clone https://github.com/TimilsinaBimal/Watchly.git
+git clone https://github.com/zippyy/Watchly.git
 cd Watchly
 
 # Install dependencies
@@ -238,7 +262,7 @@ uv run main.py --dev
 uvicorn app.core.app:app --reload
 ```
 
-Create a `.env` with at least `TMDB_API_KEY`, `TOKEN_SALT`, `HOST_NAME`, and `REDIS_URL` before running. The configure UI is served at `/configure`.
+Create a `.env` with at least `TMDB_API_KEY`, `TOKEN_SALT`, `HOST_NAME`, and `REDIS_URL` before running. The configure UI is served at `/configure`. The **Install on Nuvio** button uses Nuvio Collection Mode; copying the standard manifest URL preserves normal Stremio-compatible behavior.
 
 ### Tests, linting, formatting
 
@@ -286,8 +310,11 @@ app/
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /configure` | Web UI for setup and catalog selection. |
-| `GET /{token}/manifest.json` | Per-user Stremio manifest. |
-| `GET /{token}/catalog/{type}/{id}.json` | Catalog data for a content type and catalog ID. |
+| `GET /{token}/manifest.json` | Standard per-user Stremio-compatible manifest. |
+| `GET /{token}/catalog/{type}/{id}.json` | Standard catalog data for a content type and catalog ID. |
+| `GET /{token}/nuvio/manifest.json` | Nuvio Collection Mode manifest; keeps Watchly backing catalogs out of normal Nuvio Home rows. |
+| `GET /{token}/nuvio/catalog/{type}/{id}.json` | Nuvio Collection Mode alias for the same Watchly recommendation catalog engine. |
+| `GET /{token}/nuvio-collection.json` | Native Nuvio **For You** Collection definition generated from the user's enabled Watchly catalogs. |
 | `POST /tokens/` | Create a token from submitted credentials/settings. |
 | `GET /auth/trakt`, `GET /auth/simkl` | OAuth start; `/callback` variants complete the flow. |
 | `GET /{token}/dashboard/data` | User dashboard data. |
@@ -295,10 +322,10 @@ app/
 
 ## Contributing
 
-Contributions of all sizes are welcome!
+Contributions of all sizes are welcome! This fork tracks the upstream Watchly project while carrying Nuvio-specific Collection Mode changes.
 
 - **Small bug fixes & improvements** — open a Pull Request directly.
-- **Major features & refactors** — please [open an issue](https://github.com/TimilsinaBimal/Watchly/issues) first to discuss the approach. This keeps your work aligned with the project's direction and saves you time.
+- **Major features & refactors** — please [open an issue](https://github.com/zippyy/Watchly/issues) first to discuss the approach. This keeps your work aligned with the project's direction and saves you time.
 
 ## Funding & support
 
@@ -307,7 +334,7 @@ If you find Watchly useful, please consider supporting the project:
 
 ## Bug reports
 
-Found a bug or have a feature request? Please [open an issue](https://github.com/TimilsinaBimal/Watchly/issues) on GitHub.
+Found a bug or have a feature request? Please [open an issue](https://github.com/zippyy/Watchly/issues) on GitHub.
 
 ## Contributors
 
