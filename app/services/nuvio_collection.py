@@ -1,7 +1,30 @@
+import copy
 import re
 from typing import Any
 
 NUVIO_COLLECTION_ID = "watchly-for-you"
+_NUVIO_SEARCH_EXTRA = {"name": "search", "isRequired": True}
+
+
+def build_nuvio_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Return a Nuvio-only manifest whose catalogs do not become Home rows.
+
+    Nuvio treats catalogs with a required `search` extra as search-only and
+    excludes them from Home/Catalog Order. Collection sources still resolve and
+    call those catalog endpoints directly, so the same Watchly catalogs remain
+    usable inside the For You collection. The input may be a cached manifest, so
+    always deep-copy before modifying it.
+    """
+
+    nuvio_manifest = copy.deepcopy(manifest)
+    for catalog in nuvio_manifest.get("catalogs", []):
+        if not isinstance(catalog, dict):
+            continue
+        extras = [extra for extra in (catalog.get("extra") or []) if extra.get("name") != "search"]
+        extras.append(copy.deepcopy(_NUVIO_SEARCH_EXTRA))
+        catalog["extra"] = extras
+    return nuvio_manifest
+
 
 # These catalogs have the same semantic row for movies and series, so Nuvio can
 # present both media types inside one folder. Dynamic item/theme rows are kept
