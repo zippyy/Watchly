@@ -10,7 +10,7 @@
 </div>
 <br/>
 
-**Watchly** is a self-hosted **Stremio and Nuvio** recommendation addon that builds personalized movie and series recommendations from your own watch history. It reads what you've watched, rated, and loved — from **Stremio, Trakt, or Simkl** — builds a numerical taste profile from it, and serves recommendation rows such as "Top Picks for You", "Because you watched …", genre and keyword catalogs, creator-based picks, and more using metadata from [TMDB](https://www.themoviedb.org/).
+**Watchly** is a self-hosted **Stremio and Nuvio** recommendation addon that builds personalized movie and series recommendations from your own watch history. It reads what you've watched — from **Stremio, Trakt, Simkl, or Nuvio** — builds a numerical taste profile from it, and serves recommendation rows such as "Top Picks for You", "Because you watched …", genre and keyword catalogs, creator-based picks, and more using metadata from [TMDB](https://www.themoviedb.org/).
 
 For Stremio, Watchly behaves like a normal catalog addon. For **Nuvio**, this fork adds **Collection Mode**: the installer creates one native **For You** Collection containing Watchly's recommendation folders instead of cluttering the Nuvio home screen with separate Watchly catalog rows. Everything is configured through the same web page and continues refreshing from your saved Watchly profile in the background.
 
@@ -36,7 +36,7 @@ For Stremio, Watchly behaves like a normal catalog addon. For **Nuvio**, this fo
 ## Features
 
 - **Personalized recommendations** — a taste profile (top genres, keywords, directors, cast, eras, countries, runtime) is built from your history and drives every catalog row.
-- **Three history sources** — use your **Stremio** library, your **Trakt** account, or your **Simkl** account. Ratings, watches, loves, and rewatches are all understood.
+- **Four history sources** — use your **Stremio** library, **Trakt**, **Simkl**, or a specific **Nuvio** profile. Trakt/Simkl contribute ratings; Nuvio contributes synced watched state, completion, and recency.
 - **Multiple catalog types** — Top Picks, "Because you watched/loved", dynamic genre & keyword rows, recommendations from your recurring directors and actors, and "based on everything you loved/liked".
 - **Native Nuvio Collection Mode** — installing through the Watchly configure page creates/updates a single native **For You** Collection in Nuvio while keeping Watchly's backing catalogs out of normal Home/Catalog Order rows.
 - **Fine-grained personalization** — discovery style (mainstream → hidden gems), release-year window, excluded genres (separately for movies and series), display language, and per-catalog enable/rename/shuffle controls.
@@ -48,7 +48,7 @@ For Stremio, Watchly behaves like a normal catalog addon. For **Nuvio**, this fo
 
 ## How it works
 
-1. You open the `/configure` page and connect a history source (Stremio login, or Trakt/Simkl via OAuth). Your credentials are encrypted and stored in Redis under a short opaque **token**. That token is embedded in your personal manifest URL.
+1. You open the `/configure` page and connect a history source (Stremio, Trakt/Simkl via OAuth, or Nuvio via direct browser-to-Nuvio sign-in). Stored credentials/session tokens are encrypted in Redis under a short opaque **token**. That token is embedded in your personal manifest URL.
 2. Watchly fetches your watch history from the configured source and converts it into a source-agnostic library — ratings ≥ 9 count as *loved*, 7–8.9 as *liked*, the rest as *watched*.
 3. From that library it builds a **taste profile**: a numerical fingerprint of your preferences across genres, keywords, people, eras, countries, and runtime.
 4. When Stremio or Nuvio requests a Watchly catalog, Watchly routes the request to the matching recommendation engine, pulls candidates from TMDB (and Simkl where available), scores them against your profile, caps them for diversity, enriches them with metadata and (optionally) poster ratings, translates titles to your language, and returns standard Stremio-compatible catalog data. Nuvio Collection Mode uses those same catalog endpoints as native Collection sources.
@@ -84,7 +84,7 @@ The resulting Collection is titled **For You** and is built from the recommendat
 
 Re-running **Install on Nuvio** is safe: the existing `watchly-for-you` Collection is updated instead of duplicated, and unrelated Nuvio Collections are preserved. Existing standard Watchly installs on that Nuvio profile are upgraded in place to Collection Mode.
 
-> **Privacy:** Nuvio credentials and session tokens are sent directly from the browser to Nuvio's own Supabase backend. They are not sent to or stored by the Watchly server.
+> **Privacy:** The **Install on Nuvio** flow signs in directly from your browser to Nuvio and does not send that install session to Watchly. If you separately connect **Nuvio as a watch-history source**, your Nuvio password still never reaches Watchly; only the selected profile plus Nuvio access/refresh tokens are sent on Save and encrypted at rest so Watchly can read history later.
 
 The regular `/{token}/manifest.json` and `/{token}/catalog/...` routes remain unchanged for Stremio and conventional addon installs.
 
@@ -95,6 +95,9 @@ Watchly works for users who keep their library in different places. Pick one sou
 - **Stremio** — uses your Stremio library directly (requires a Stremio email/password or auth key).
 - **Trakt** — connect via OAuth on the configure page; Watchly reads your watched history and ratings.
 - **Simkl** — connect via OAuth on the configure page; Watchly reads your watched history and ratings.
+- **Nuvio** — sign in directly to Nuvio from the configure page and choose a profile. Watchly reads the completed watched items and playback progress Nuvio Sync has stored for that profile. Nuvio does not expose an equivalent explicit rating signal here, so Watchly uses completion and recency rather than ratings.
+
+> If that Nuvio profile is configured to use an external tracking provider such as Trakt/Simkl, Nuvio may skip writing some watched/progress events to its own Supabase sync store. In that setup, selecting the corresponding Trakt or Simkl account directly in Watchly gives the most complete history.
 
 A single install uses exactly one source at a time. Switching sources rebuilds your library and profile from the new account.
 
@@ -216,6 +219,8 @@ All settings are environment variables. Only the first three are strictly requir
 | --- | --- | --- |
 | `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` | — | Trakt OAuth app credentials; enable Trakt as a history source. |
 | `SIMKL_CLIENT_ID` / `SIMKL_CLIENT_SECRET` | — | Simkl OAuth app credentials; enable Simkl as a history source. |
+| `NUVIO_SUPABASE_URL` | Nuvio's public Sync endpoint | Override the Nuvio Sync Supabase URL; normally leave unchanged. |
+| `NUVIO_SUPABASE_KEY` | Nuvio's public publishable key | Override the Nuvio public client key; normally leave unchanged. |
 
 ### Tuning & behavior
 
@@ -241,6 +246,7 @@ These are only needed if you want the corresponding feature; Watchly runs fine w
 
 - **Trakt** — create an API app at [trakt.tv/oauth/applications](https://trakt.tv/oauth/applications). Set the redirect URI to `HOST_NAME/auth/trakt/callback` and put the client ID/secret in `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET`.
 - **Simkl** — create an app at [simkl.com/settings/developer](https://simkl.com/settings/developer). Set the redirect URI to `HOST_NAME/auth/simkl/callback` and put the credentials in `SIMKL_CLIENT_ID` / `SIMKL_CLIENT_SECRET`.
+- **Nuvio history** — no developer credentials are required. The configure page authenticates directly against Nuvio's public Sync backend, lets the user choose a profile, and stores only encrypted session tokens/profile selection after Save.
 - **AI-named rows** — users configure an LLM provider (Gemini, OpenAI, Anthropic, or OpenRouter) with their own API key on the configure page; no server config required. Without one, rows fall back to deterministic names.
 - **Poster ratings (RPDB)** — users enter their own [RatingPosterDB](https://ratingposterdb.com/) key on the configure page; no server config required.
 
