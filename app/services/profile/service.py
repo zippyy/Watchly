@@ -327,11 +327,7 @@ class ProfileService:
                         app_settings.SIMKL_CLIENT_ID or "",
                     )
                 except httpx.HTTPStatusError as e:
-                    if (
-                        e.response.status_code in (401, 403)
-                        and user_settings.simkl_refresh_token
-                        and token
-                    ):
+                    if e.response.status_code in (401, 403) and user_settings.simkl_refresh_token and token:
                         logger.info(f"[{token[:8]}...] Simkl 401/403; attempting AUTH V2 token refresh.")
                         refreshed = await self._refresh_simkl_token(
                             token,
