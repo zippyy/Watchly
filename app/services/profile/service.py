@@ -167,7 +167,7 @@ class ProfileService:
         extra_exclusion_imdb: set[str] | None = None,
         source: str | None = None,
     ) -> tuple[TasteProfile | None, set[str]]:
-        """Build taste profile from external watch history (Trakt/Simkl)."""
+        """Build taste profile from external watch history (Trakt/Simkl/Nuvio)."""
         collection = watch_history_to_library_collection(watch_history)
         profile = await self._build_from_collection(
             collection, content_type, source or watch_history.source or "stremio"
@@ -209,7 +209,7 @@ class ProfileService:
     ) -> tuple[TasteProfile | None, set[int], set[str]]:
         """Build profile data and cache the profile and watched sets.
 
-        Dispatches on user_settings.watch_history_source: uses Trakt or Simkl
+        Dispatches on user_settings.watch_history_source: uses Trakt, Simkl, or Nuvio
         when the user connected those, otherwise the Stremio library.
         """
         source = user_settings.watch_history_source if user_settings else "stremio"
@@ -226,7 +226,7 @@ class ProfileService:
             await user_cache.invalidate_profile(token, content_type)
             await user_cache.invalidate_watched_sets(token, content_type)
 
-        if source in ("trakt", "simkl"):
+        if source in ("trakt", "simkl", "nuvio"):
             profile, watched_tmdb, watched_imdb = await self._build_from_external_source(
                 source, user_settings, content_type, library_items, token=token
             )
@@ -248,7 +248,7 @@ class ProfileService:
         user_settings: UserSettings | None,
         token: str | None = None,
     ) -> tuple[WatchHistory | None, bool, bool]:
-        """Fetch watch history from Trakt or Simkl with token refresh + revoke handling.
+        """Fetch watch history from Trakt, Simkl, or Nuvio with refresh + revoke handling.
 
         Returns (history, token_missing, token_revoked). On any non-auth failure
         history is None and both flags are False — caller decides whether to
@@ -345,6 +345,63 @@ class ProfileService:
                     watch_history = None
             else:
                 token_missing = True
+        elif source == "nuvio":
+            if user_settings and user_settings.nuvio_access_token and user_settings.nuvio_profile_id is not None:
+                access_token, _ = await self._ensure_nuvio_token_fresh(token, user_settings)
+
+                from app.services.nuvio import nuvio_service
+
+                try:
+                    watch_history = await nuvio_service.get_history(
+                        access_token,
+                        user_settings.nuvio_profile_id,
+                    )
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code in (401, 403) and user_settings.nuvio_refresh_token and token:
+                        logger.info(f"[{token[:8]}...] Nuvio 401/403 on history fetch; attempting session refresh.")
+                        refreshed = await self._refresh_nuvio_token(token, user_settings.nuvio_refresh_token)
+                        if refreshed:
+                            try:
+                                watch_history = await nuvio_service.get_history(
+                                    refreshed,
+                                    user_settings.nuvio_profile_id,
+                                )
+                            except httpx.HTTPStatusError as retry_e:
+                                if retry_e.response.status_code in (401, 403):
+                                    token_revoked = True
+                                    logger.error(
+                                        f"Nuvio session still rejected after refresh (HTTP "
+                                        f"{retry_e.response.status_code}). Clearing stored session."
+                                    )
+                                else:
+                                    logger.error(
+                                        f"Nuvio history fetch failed after refresh (HTTP "
+                                        f"{retry_e.response.status_code}: {retry_e})."
+                                    )
+                                watch_history = None
+                        else:
+                            token_revoked = True
+                            logger.error("Nuvio session refresh failed; user must reconnect Nuvio.")
+                    elif e.response.status_code in (401, 403):
+                        token_revoked = True
+                        logger.error(
+                            f"Nuvio session rejected (HTTP {e.response.status_code}). "
+                            "Clearing stored session; user must reconnect Nuvio."
+                        )
+                    else:
+                        logger.error(
+                            f"Nuvio history fetch failed (HTTP {e.response.status_code}: {e}). "
+                            "Falling back to Stremio library when available."
+                        )
+                    watch_history = None
+                except Exception as e:
+                    logger.error(
+                        f"Nuvio history fetch failed ({type(e).__name__}: {e}). "
+                        "Falling back to Stremio library when available."
+                    )
+                    watch_history = None
+            else:
+                token_missing = True
 
         if token_missing:
             logger.error(
@@ -437,6 +494,64 @@ class ProfileService:
         await user_cache.set_library_buckets(token, content_type, typed)
         return profile, set(), watched_imdb
 
+    async def _ensure_nuvio_token_fresh(self, token: str | None, user_settings: UserSettings) -> tuple[str, bool]:
+        """Refresh a Nuvio/Supabase access token shortly before it expires."""
+        import time as _time
+
+        access_token = user_settings.nuvio_access_token or ""
+        expires_at = user_settings.nuvio_token_expires_at or 0
+        if not (token and user_settings.nuvio_refresh_token and expires_at):
+            return access_token, False
+
+        # Supabase access tokens are short-lived. Refresh five minutes early.
+        if _time.time() < expires_at - 300:
+            return access_token, False
+
+        logger.info(f"[{token[:8]}...] Nuvio session near expiry; refreshing proactively.")
+        refreshed = await self._refresh_nuvio_token(token, user_settings.nuvio_refresh_token)
+        if refreshed:
+            return refreshed, True
+        return access_token, False
+
+    async def _refresh_nuvio_token(self, token: str, refresh_token: str) -> str | None:
+        """Refresh and persist a Nuvio/Supabase session."""
+        import time as _time
+
+        from app.services.nuvio import nuvio_service
+        from app.services.token_store import token_store
+
+        try:
+            data = await nuvio_service.refresh_session(refresh_token)
+        except Exception as e:
+            logger.warning(f"[{token[:8]}...] Nuvio refresh call failed: {e}")
+            return None
+
+        new_access = str(data.get("access_token") or "")
+        new_refresh = str(data.get("refresh_token") or refresh_token)
+        expires_at = data.get("expires_at")
+        if expires_at is None:
+            expires_in = int(data.get("expires_in") or 0)
+            expires_at = int(_time.time()) + expires_in if expires_in else 0
+        new_expires_at = int(expires_at or 0)
+        if not new_access:
+            logger.warning(f"[{token[:8]}...] Nuvio refresh returned no access_token.")
+            return None
+
+        try:
+            credentials = await token_store.get_user_data(token)
+            if credentials:
+                settings_dict = credentials.get("settings") or {}
+                settings_dict["nuvio_access_token"] = new_access
+                settings_dict["nuvio_refresh_token"] = new_refresh
+                settings_dict["nuvio_token_expires_at"] = new_expires_at
+                credentials["settings"] = settings_dict
+                await token_store.update_user_data(token, credentials)
+                logger.info(f"[{token[:8]}...] Nuvio session refreshed; new expiry={new_expires_at}.")
+        except Exception as e:
+            logger.warning(f"[{token[:8]}...] Failed to persist refreshed Nuvio session: {e}")
+
+        return new_access
+
     async def _ensure_trakt_token_fresh(self, token: str | None, user_settings: UserSettings) -> tuple[str, bool]:
         """If the Trakt access token is within 7 days of expiry, refresh it.
 
@@ -506,7 +621,7 @@ class ProfileService:
     async def _clear_revoked_token(self, token: str, source: str) -> None:
         """Wipe a revoked external-source token from stored credentials.
 
-        Called when Trakt/Simkl returns 401/403 — keeps the user from looping
+        Called when Trakt/Simkl/Nuvio returns 401/403 — keeps the user from looping
         on a dead token forever. Their /configure page will show the source
         as disconnected on next visit so they can reconnect.
         """
@@ -527,6 +642,11 @@ class ProfileService:
                 if settings_dict.get("simkl_access_token"):
                     settings_dict["simkl_access_token"] = None
                     mutated = True
+            elif source == "nuvio":
+                for field in ("nuvio_access_token", "nuvio_refresh_token"):
+                    if settings_dict.get(field):
+                        settings_dict[field] = None
+                        mutated = True
             if mutated:
                 credentials["settings"] = settings_dict
                 await token_store.update_user_data(token, credentials)
