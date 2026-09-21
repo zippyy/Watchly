@@ -218,7 +218,7 @@ All settings are environment variables. Only the first three are strictly requir
 | Variable | Default | Description |
 | --- | --- | --- |
 | `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET` | — | Trakt OAuth app credentials; enable Trakt as a history source. |
-| `SIMKL_CLIENT_ID` / `SIMKL_CLIENT_SECRET` | — | Simkl OAuth app credentials; enable Simkl as a history source. |
+| `SIMKL_CLIENT_ID` / `SIMKL_CLIENT_SECRET` | — | Simkl **AUTH V2** Server-app credentials; enable Simkl as a history source. Redirect URI: `HOST_NAME/auth/simkl/callback`. |
 | `NUVIO_SUPABASE_URL` | `https://api.nuvio.tv` | Nuvio Cloud API/Sync endpoint. Override only when targeting a self-hosted Nuvio backend. |
 | `NUVIO_SUPABASE_KEY` | Nuvio's documented public publishable key | Public client key used for Nuvio Cloud. Override it together with the URL for a self-hosted Nuvio backend. |
 
@@ -245,7 +245,7 @@ All settings are environment variables. Only the first three are strictly requir
 These are only needed if you want the corresponding feature; Watchly runs fine with just TMDB + Redis.
 
 - **Trakt** — create an API app at [trakt.tv/oauth/applications](https://trakt.tv/oauth/applications). Set the redirect URI to `HOST_NAME/auth/trakt/callback` and put the client ID/secret in `TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET`.
-- **Simkl** — create an app at [simkl.com/settings/developer](https://simkl.com/settings/developer). Set the redirect URI to `HOST_NAME/auth/simkl/callback` and put the credentials in `SIMKL_CLIENT_ID` / `SIMKL_CLIENT_SECRET`.
+- **Simkl** — create a **Server apps & services** app at [simkl.com/settings/developer](https://simkl.com/settings/developer). Set the redirect URI to `HOST_NAME/auth/simkl/callback` and put the credentials in `SIMKL_CLIENT_ID` / `SIMKL_CLIENT_SECRET`. Watchly uses Simkl **AUTH V2** (`/oauth2/authorize`) with PKCE and stores the returned refresh token encrypted so the 7-day access token can renew automatically.
 - **Nuvio history** — no developer credentials are required. By default Watchly uses Nuvio's documented Cloud API at `https://api.nuvio.tv` with its public publishable client key. The configure page authenticates directly against that backend, lets the user choose a profile, and stores only encrypted session tokens/profile selection after Save. Self-hosted Nuvio deployments can override `NUVIO_SUPABASE_URL` and `NUVIO_SUPABASE_KEY`.
 - **AI-named rows** — users configure an LLM provider (Gemini, OpenAI, Anthropic, or OpenRouter) with their own API key on the configure page; no server config required. Without one, rows fall back to deterministic names.
 - **Poster ratings (RPDB)** — users enter their own [RatingPosterDB](https://ratingposterdb.com/) key on the configure page; no server config required.
