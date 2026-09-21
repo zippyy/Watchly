@@ -14,10 +14,10 @@ const ACTIVE_BORDER_CLASS = 'border-white/20';
 const INACTIVE_CLASSES = ['text-slate-400', 'hover:text-white', 'hover:bg-white/5'];
 const INACTIVE_BORDER_CLASS = 'border-transparent';
 
-const PROVIDER_LABELS = { stremio: 'Stremio', trakt: 'Trakt', simkl: 'Simkl' };
+const PROVIDER_LABELS = { stremio: 'Stremio', trakt: 'Trakt', simkl: 'Simkl', nuvio: 'Nuvio' };
 
 let switchSectionFn = null;
-const connectedState = { stremio: false, trakt: false, simkl: false };
+const connectedState = { stremio: false, trakt: false, simkl: false, nuvio: false };
 
 export function initializeAccountsUI({ switchSection } = {}) {
     switchSectionFn = switchSection || null;
@@ -38,13 +38,10 @@ export function setStremioConnected(connected) {
     setProviderDot('stremio', connected);
     setProviderView('stremio', connected);
 
-    if (!connected) {
-        // Cascade: optional providers reset visually when Stremio drops.
-        // Tokens in window._watchlyOAuth and inline status text are managed
-        // by callers (resetApp / OAuth handlers), not here.
-        setProviderConnected('trakt', false);
-        setProviderConnected('simkl', false);
-        setWatchHistorySource('stremio');
+    if (!connected && currentSource() === 'stremio') {
+        // External providers are independent accounts. Logging out of Stremio
+        // must not visually disconnect Trakt, Simkl, or Nuvio.
+        setWatchHistorySource(firstConnectedSource());
     }
 
     syncAccountsNextButton();
@@ -55,14 +52,14 @@ export function setProviderConnected(provider, connected) {
         setStremioConnected(connected);
         return;
     }
-    if (provider !== 'trakt' && provider !== 'simkl') return;
+    if (!['trakt', 'simkl', 'nuvio'].includes(provider)) return;
 
     connectedState[provider] = connected;
     setProviderDot(provider, connected);
     setProviderView(provider, connected);
 
     if (connected) {
-        // Trakt/Simkl alone is enough to configure the addon — no Stremio needed.
+        // Trakt/Simkl/Nuvio alone is enough to configure the addon — no Stremio needed.
         unlockNavigation();
     }
 
@@ -82,6 +79,7 @@ function firstConnectedSource() {
     if (connectedState.stremio) return 'stremio';
     if (connectedState.trakt) return 'trakt';
     if (connectedState.simkl) return 'simkl';
+    if (connectedState.nuvio) return 'nuvio';
     return 'stremio';
 }
 
@@ -118,7 +116,7 @@ function goToAccounts(scrollTo) {
 function syncAccountsNextButton() {
     const btn = document.getElementById('accountsNextBtn');
     if (!btn) return;
-    btn.disabled = !(connectedState.stremio || connectedState.trakt || connectedState.simkl);
+    btn.disabled = !(connectedState.stremio || connectedState.trakt || connectedState.simkl || connectedState.nuvio);
 }
 
 function setProviderView(provider, connected) {
