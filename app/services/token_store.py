@@ -312,6 +312,18 @@ class TokenStore:
 
         return None
 
+    async def get_user_data_fresh(self, token: str) -> dict[str, Any] | None:
+        """Read user data after dropping this process's local cache entry.
+
+        Used when another worker may just have updated shared Redis state, such
+        as after a distributed OAuth token refresh lock.
+        """
+        try:
+            self._get_user_data_cached.cache_invalidate(token)
+        except (KeyError, AttributeError):
+            pass
+        return await self.get_user_data(token)
+
     async def get_user_data(self, token: str) -> dict[str, Any] | None:
         data = await self._get_user_data_cached(token)
         if data is None:
