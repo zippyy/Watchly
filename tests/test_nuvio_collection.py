@@ -77,7 +77,6 @@ def test_nuvio_collection_endpoint_rejects_bad_token():
     assert response.status_code == 400
 
 
-
 def test_nuvio_manifest_hides_catalog_rows_without_mutating_standard_manifest():
     manifest = _manifest()
     original_extras = [dict(catalog) for catalog in manifest["catalogs"]]
@@ -109,7 +108,6 @@ def test_nuvio_manifest_endpoint_uses_same_tokenized_catalogs(monkeypatch):
         any(extra.get("name") == "search" and extra.get("isRequired") for extra in catalog.get("extra", []))
         for catalog in payload["catalogs"]
     )
-
 
 
 def test_nuvio_catalog_alias_uses_existing_catalog_service(monkeypatch):
