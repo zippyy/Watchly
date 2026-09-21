@@ -58,6 +58,17 @@ def setup_fakes(monkeypatch, stremio_identity=None):
 
     monkeypatch.setattr("app.services.auth.simkl_service.get_user_settings", fake_simkl_settings)
 
+    async def fake_nuvio_user(access_token):
+        return {"id": "nuvio-user-123", "email": "nuvio@example.com"}
+
+    async def fake_nuvio_profile(access_token, profile_id):
+        if int(profile_id) != 2:
+            return None
+        return {"profile_index": 2, "name": "Nick"}
+
+    monkeypatch.setattr("app.services.auth.nuvio_service.get_user", fake_nuvio_user)
+    monkeypatch.setattr("app.services.auth.nuvio_service.get_profile", fake_nuvio_profile)
+
     return fake
 
 
@@ -522,3 +533,115 @@ def test_masked_provider_tokens_are_never_presented_to_the_provider(monkeypatch)
     assert user_settings.simkl_access_token == "s-abc"
     stored = json.loads(fake.data[f"watchly:token:{token}"])
     assert set(stored["identities"]) == {"stremio", "trakt", "simkl"}
+
+
+def test_nuvio_only_account_is_profile_scoped_and_reused(monkeypatch):
+    fake = setup_fakes(monkeypatch)
+    service = AuthService()
+    payload = TokenRequest(
+        nuvio_access_token="n-access",
+        nuvio_refresh_token="n-refresh",
+        nuvio_token_expires_at=2_000_000_000,
+        nuvio_profile_id=2,
+        nuvio_profile_name="Nick",
+        watch_history_source="nuvio",
+    )
+
+    response, auth_key, user_settings = asyncio.run(service.create_user_token(payload))
+
+    assert auth_key is None
+    assert user_settings.watch_history_source == "nuvio"
+    assert user_settings.nuvio_profile_id == 2
+    token = response.token
+    assert fake.data["watchly:identity:nuvio:nuvio-user-123:2"] == token
+
+    response2, _, _ = asyncio.run(service.create_user_token(payload))
+    assert response2.token == token
+
+
+def test_nuvio_profile_must_belong_to_authenticated_user(monkeypatch):
+    setup_fakes(monkeypatch)
+    service = AuthService()
+    payload = TokenRequest(
+        nuvio_access_token="n-access",
+        nuvio_profile_id=99,
+        nuvio_profile_name="Not Mine",
+        watch_history_source="nuvio",
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_user_token(payload))
+    assert exc.value.status_code == 400
+
+
+def test_nuvio_tokens_are_masked_on_identity_lookup(monkeypatch):
+    setup_fakes(monkeypatch)
+    service = AuthService()
+    payload = TokenRequest(
+        nuvio_access_token="n-access",
+        nuvio_refresh_token="n-refresh",
+        nuvio_token_expires_at=2_000_000_000,
+        nuvio_profile_id=2,
+        nuvio_profile_name="Nick",
+        watch_history_source="nuvio",
+    )
+    asyncio.run(service.create_user_token(payload))
+
+    result = asyncio.run(
+        service.get_identity_with_settings(
+            TokenRequest(
+                nuvio_access_token="n-access",
+                nuvio_profile_id=2,
+                nuvio_profile_name="Nick",
+            )
+        )
+    )
+
+    assert result["exists"] is True
+    assert result["display_name"] == "Nuvio · Nick"
+    assert result["settings"]["nuvio_access_token"] == STORED_SECRET_SENTINEL
+    assert result["settings"]["nuvio_refresh_token"] == STORED_SECRET_SENTINEL
+    assert result["settings"]["nuvio_profile_id"] == 2
+
+
+def test_expired_nuvio_session_is_refreshed_and_returned(monkeypatch):
+    setup_fakes(monkeypatch)
+    service = AuthService()
+    calls = []
+
+    async def reject_old(access_token):
+        if access_token == "n-old":
+            raise httpx.HTTPStatusError(
+                "401",
+                request=httpx.Request("GET", "https://example.invalid"),
+                response=httpx.Response(401),
+            )
+        return {"id": "nuvio-user-123"}
+
+    async def refresh(refresh_token):
+        calls.append(refresh_token)
+        return {
+            "access_token": "n-new",
+            "refresh_token": "n-refresh-new",
+            "expires_in": 3600,
+            "expires_at": 2_100_000_000,
+        }
+
+    monkeypatch.setattr("app.services.auth.nuvio_service.get_user", reject_old)
+    monkeypatch.setattr("app.services.auth.nuvio_service.refresh_session", refresh)
+
+    payload = TokenRequest(
+        nuvio_access_token="n-old",
+        nuvio_refresh_token="n-refresh-old",
+        nuvio_profile_id=2,
+        nuvio_profile_name="Nick",
+        watch_history_source="nuvio",
+    )
+    response, _, user_settings = asyncio.run(service.create_user_token(payload))
+
+    assert calls == ["n-refresh-old"]
+    assert user_settings.nuvio_access_token == "n-new"
+    assert user_settings.nuvio_refresh_token == "n-refresh-new"
+    assert response.refreshedNuvio.access_token == "n-new"
+    assert response.refreshedNuvio.refresh_token == "n-refresh-new"
+    assert response.refreshedNuvio.expires_at == 2_100_000_000

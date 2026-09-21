@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     SIMKL_CLIENT_ID: str | None = None
     SIMKL_CLIENT_SECRET: str | None = None
 
+    # Nuvio Sync uses Supabase. The publishable key is intentionally public:
+    # Nuvio's clients ship the same key and user data remains protected by JWT/RLS.
+    NUVIO_SUPABASE_URL: str = "https://dpyhjjcoabcglfmgecug.supabase.co"
+    NUVIO_SUPABASE_KEY: str = "sb_publishable_zcNkgqGJjBtj8GoRlMvl9A_zkdmXhf5"
+
 
 settings = Settings()
 

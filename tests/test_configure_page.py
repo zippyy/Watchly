@@ -27,6 +27,16 @@ def test_configure_page_bootstraps_current_year_and_year_defaults(monkeypatch):
     assert 'id="yearMax" min="1970"' in html
 
 
+def test_configure_page_includes_nuvio_history_provider():
+    response = client.get("/configure")
+
+    assert response.status_code == 200
+    html = response.text
+    assert 'id="provider-nuvio"' in html
+    assert 'id="nuvioHistoryConnectBtn"' in html
+    assert 'data-source-btn="nuvio"' in html
+
+
 def test_changelog_page_renders_markdown():
     response = client.get("/changelog")
 

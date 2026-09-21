@@ -229,9 +229,23 @@ async function fetchStremioIdentity(authKey) {
 // provider-only users get their saved settings and dashboard back without a
 // Stremio login. Lookup failures are non-fatal — the user can still configure.
 export async function recallProviderAccount(provider, tokens) {
-    const payload = provider === 'trakt'
-        ? { trakt_access_token: tokens.access_token }
-        : { simkl_access_token: tokens.access_token };
+    let payload;
+    if (provider === 'trakt') {
+        payload = { trakt_access_token: tokens.access_token };
+    } else if (provider === 'simkl') {
+        payload = { simkl_access_token: tokens.access_token };
+    } else if (provider === 'nuvio') {
+        payload = {
+            nuvio_access_token: tokens.access_token,
+            nuvio_refresh_token: tokens.refresh_token,
+            nuvio_token_expires_at: tokens.expires_at,
+            nuvio_profile_id: tokens.profile_id,
+            nuvio_profile_name: tokens.profile_name,
+        };
+    } else {
+        return;
+    }
+
     try {
         await fetchIdentity(payload);
     } catch (e) {
@@ -264,7 +278,7 @@ async function fetchIdentity(payload) {
     }
 
     const data = await res.json();
-    const userDisplay = data.email || data.user_id;
+    const userDisplay = data.display_name || data.email || data.user_id;
 
     // Remember whether this account already has an install (and its token) so the
     // Dashboard section can load it without a second login.
@@ -569,6 +583,23 @@ function restoreWatchHistoryState(settings) {
         if (settings.simkl_access_token !== window.STORED_SECRET) {
             validateAndShowSimklUser(settings.simkl_access_token);
         }
+    }
+
+    if (settings.nuvio_access_token && settings.nuvio_profile_id != null && !hasLiveToken('nuvio')) {
+        window._watchlyOAuth.nuvio = {
+            access_token: settings.nuvio_access_token,
+            refresh_token: settings.nuvio_refresh_token || '',
+            expires_at: settings.nuvio_token_expires_at || 0,
+            profile_id: Number(settings.nuvio_profile_id),
+            profile_name: settings.nuvio_profile_name || `Profile ${settings.nuvio_profile_id}`,
+        };
+        const nuvioHistoryStatus = document.getElementById('nuvioHistoryStatus');
+        if (nuvioHistoryStatus) {
+            nuvioHistoryStatus.textContent = `Nuvio · ${window._watchlyOAuth.nuvio.profile_name}`;
+        }
+        const nuvioHistoryLogoutBtn = document.getElementById('nuvioHistoryLogoutBtn');
+        if (nuvioHistoryLogoutBtn) nuvioHistoryLogoutBtn.classList.remove('hidden');
+        setProviderConnected('nuvio', true);
     }
 
     if (settings.watch_history_source) {

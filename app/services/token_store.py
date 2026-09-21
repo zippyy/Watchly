@@ -202,6 +202,18 @@ class TokenStore:
                 except Exception as exc:
                     logger.warning(f"Failed to encrypt simkl_access_token for {redact_token(token)}: {exc}")
 
+        # Encrypt Nuvio/Supabase session tokens if present. The Nuvio password is
+        # never submitted to Watchly; only these session tokens are persisted.
+        if storage_data.get("settings") and isinstance(storage_data["settings"], dict):
+            for nuvio_field in ("nuvio_access_token", "nuvio_refresh_token"):
+                value = storage_data["settings"].get(nuvio_field)
+                if value:
+                    try:
+                        if not value.startswith("gAAAAAB"):
+                            storage_data["settings"][nuvio_field] = self.encrypt_token(value)
+                    except Exception as exc:
+                        logger.warning(f"Failed to encrypt {nuvio_field} for {redact_token(token)}: {exc}")
+
         json_str = json.dumps(storage_data)
 
         if settings.TOKEN_TTL_SECONDS and settings.TOKEN_TTL_SECONDS > 0:
@@ -409,6 +421,16 @@ class TokenStore:
                         data["settings"]["simkl_access_token"] = self.decrypt_token(simkl_access_token)
                 except Exception as e:
                     logger.debug(f"Decryption failed for simkl_access_token associated with {redact_token(token)}: {e}")
+
+            # Decrypt Nuvio/Supabase session tokens
+            for nuvio_field in ("nuvio_access_token", "nuvio_refresh_token"):
+                value = data["settings"].get(nuvio_field)
+                if value:
+                    try:
+                        if value.startswith("gAAAAA"):
+                            data["settings"][nuvio_field] = self.decrypt_token(value)
+                    except Exception as e:
+                        logger.debug(f"Decryption failed for {nuvio_field} associated with {redact_token(token)}: {e}")
 
         return data
 

@@ -32,12 +32,25 @@ class TokenRequest(BaseModel):
         default=None, description="Epoch seconds when the Trakt access token expires"
     )
     simkl_access_token: str | None = Field(default=None, description="Simkl OAuth access token")
-    watch_history_source: Literal["stremio", "trakt", "simkl"] = Field(
+    nuvio_access_token: str | None = Field(default=None, description="Nuvio Sync access token")
+    nuvio_refresh_token: str | None = Field(default=None, description="Nuvio Sync refresh token")
+    nuvio_token_expires_at: int | None = Field(
+        default=None, description="Epoch seconds when the Nuvio access token expires"
+    )
+    nuvio_profile_id: int | None = Field(default=None, description="Nuvio profile index used for history")
+    nuvio_profile_name: str | None = Field(default=None, description="Nuvio profile display name")
+    watch_history_source: Literal["stremio", "trakt", "simkl", "nuvio"] = Field(
         default="stremio", description="Source for watch history"
     )
 
 
 class TraktTokens(BaseModel):
+    access_token: str
+    refresh_token: str
+    expires_at: int
+
+
+class NuvioTokens(BaseModel):
     access_token: str
     refresh_token: str
     expires_at: int
@@ -56,4 +69,8 @@ class TokenResponse(BaseModel):
             "Set when the submitted Trakt tokens were expired and refreshed. Trakt rotates refresh tokens, "
             "so the client must replace its copy or the next submit will present a spent refresh token."
         ),
+    )
+    refreshedNuvio: NuvioTokens | None = Field(
+        default=None,
+        description="Set when Watchly refreshed the submitted Nuvio/Supabase session.",
     )
