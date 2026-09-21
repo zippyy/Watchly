@@ -46,7 +46,16 @@ async function nuvioLogin(email, password) {
     if (!data?.access_token || !data?.user?.id) {
         throw new Error('Nuvio did not return a session. Check your credentials.');
     }
-    return { token: data.access_token, userId: data.user.id };
+    const expiresIn = Number(data.expires_in || 0);
+    const expiresAt = Number(data.expires_at || 0)
+        || (expiresIn ? Math.floor(Date.now() / 1000) + expiresIn : 0);
+    return {
+        token: data.access_token,
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token || '',
+        expiresAt,
+        userId: data.user.id,
+    };
 }
 
 async function nuvioProfiles(token) {
@@ -213,6 +222,174 @@ async function installCollectionToProfile({ token, profileId, manifestUrl }) {
     const merged = mergeWatchlyCollection(existing, collection);
     await pushNuvioCollections({ token, profileId, collections: merged });
     return existing.some(item => item?.id === collection.id) ? 'updated' : 'created';
+}
+
+// --- Nuvio history-source connection UI ---
+
+let historyModalEl = null;
+
+function ensureHistoryModal() {
+    if (historyModalEl) return historyModalEl;
+
+    historyModalEl = document.createElement('div');
+    historyModalEl.id = 'nuvioHistoryModal';
+    historyModalEl.className = 'fixed inset-0 z-50 hidden items-center justify-center p-4';
+    historyModalEl.innerHTML = `
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" data-nuvio-history-close></div>
+        <div class="relative bg-neutral-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl shadow-black/50">
+            <div class="flex items-start justify-between mb-1">
+                <h3 class="text-lg font-semibold text-white">Connect Nuvio History</h3>
+                <button type="button" class="text-slate-500 hover:text-white transition"
+                    data-nuvio-history-close aria-label="Close">✕</button>
+            </div>
+            <p class="text-xs text-slate-500 mb-2">
+                Your email and password are sent directly from this browser to Nuvio's own authentication service.
+                Watchly never receives or stores your Nuvio password.
+            </p>
+            <p class="text-xs text-slate-500 mb-5">
+                After sign-in, Watchly stores only the Nuvio session tokens and selected profile needed to read
+                synced watch history. Those tokens are encrypted at rest.
+            </p>
+
+            <div id="nuvioHistoryLoginStep" class="grid gap-3">
+                <input id="nuvioHistoryEmail" type="email" autocomplete="email" placeholder="Nuvio email"
+                    class="w-full bg-neutral-950 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:ring-2 focus:ring-white/20 focus:border-white/30 outline-none transition-all">
+                <input id="nuvioHistoryPassword" type="password" autocomplete="current-password" placeholder="Nuvio password"
+                    class="w-full bg-neutral-950 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:ring-2 focus:ring-white/20 focus:border-white/30 outline-none transition-all">
+                <button type="button" id="nuvioHistorySubmitBtn"
+                    class="mt-1 w-full bg-white text-black hover:bg-white/90 font-medium py-3 rounded-xl transition border border-white/10">
+                    Sign in to Nuvio</button>
+            </div>
+
+            <div id="nuvioHistoryProfileStep" class="hidden grid gap-3">
+                <label class="text-xs text-slate-400">Choose the Nuvio profile whose history Watchly should read</label>
+                <select id="nuvioHistoryProfileSelect"
+                    class="w-full appearance-none bg-neutral-950 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none"></select>
+                <button type="button" id="nuvioHistoryProfileBtn"
+                    class="mt-1 w-full bg-white text-black hover:bg-white/90 font-medium py-3 rounded-xl transition border border-white/10">
+                    Use this profile</button>
+            </div>
+
+            <div id="nuvioHistoryStatus" class="hidden mt-4 text-sm rounded-xl p-3"></div>
+        </div>`;
+
+    document.body.appendChild(historyModalEl);
+    historyModalEl.querySelectorAll('[data-nuvio-history-close]').forEach(el => {
+        el.addEventListener('click', closeHistoryModal);
+    });
+    return historyModalEl;
+}
+
+function closeHistoryModal() {
+    if (!historyModalEl) return;
+    historyModalEl.classList.add('hidden');
+    historyModalEl.classList.remove('flex');
+    const password = historyModalEl.querySelector('#nuvioHistoryPassword');
+    if (password) password.value = '';
+}
+
+function setHistoryStatus(kind, message) {
+    const el = historyModalEl.querySelector('#nuvioHistoryStatus');
+    el.classList.remove(
+        'hidden',
+        'bg-red-500/10', 'text-red-200',
+        'bg-green-500/10', 'text-green-200',
+        'bg-white/5', 'text-slate-300'
+    );
+    const styles = {
+        error: ['bg-red-500/10', 'text-red-200'],
+        success: ['bg-green-500/10', 'text-green-200'],
+        info: ['bg-white/5', 'text-slate-300'],
+    };
+    el.classList.add(...styles[kind]);
+    el.textContent = message;
+}
+
+export function openNuvioHistoryConnect(onConnected) {
+    const modal = ensureHistoryModal();
+    const loginStep = modal.querySelector('#nuvioHistoryLoginStep');
+    const profileStep = modal.querySelector('#nuvioHistoryProfileStep');
+    const status = modal.querySelector('#nuvioHistoryStatus');
+    const submitBtn = modal.querySelector('#nuvioHistorySubmitBtn');
+    const profileBtn = modal.querySelector('#nuvioHistoryProfileBtn');
+
+    loginStep.classList.remove('hidden');
+    profileStep.classList.add('hidden');
+    status.classList.add('hidden');
+
+    let session = null;
+    let profiles = [];
+
+    const finish = async (profileId, button) => {
+        const profile = profiles.find(p => Number(p.profile_index) === Number(profileId))
+            || { profile_index: profileId, name: `Profile ${profileId}` };
+        setBusy(button, true, 'Connecting…');
+        try {
+            const tokens = {
+                access_token: session.accessToken,
+                refresh_token: session.refreshToken,
+                expires_at: session.expiresAt,
+                profile_id: Number(profile.profile_index) || 1,
+                profile_name: profile.name || `Profile ${profile.profile_index || 1}`,
+            };
+            if (typeof onConnected === 'function') {
+                await onConnected(tokens);
+            }
+            loginStep.classList.add('hidden');
+            profileStep.classList.add('hidden');
+            setHistoryStatus('success', `Connected to Nuvio profile “${tokens.profile_name}”.`);
+        } catch (err) {
+            setHistoryStatus('error', err.message || 'Could not connect this Nuvio profile.');
+        } finally {
+            setBusy(button, false);
+        }
+    };
+
+    submitBtn.onclick = async () => {
+        const email = modal.querySelector('#nuvioHistoryEmail').value.trim();
+        const password = modal.querySelector('#nuvioHistoryPassword').value;
+        if (!email || !password) {
+            setHistoryStatus('error', 'Enter your Nuvio email and password.');
+            return;
+        }
+
+        setBusy(submitBtn, true, 'Signing in…');
+        try {
+            session = await nuvioLogin(email, password);
+            modal.querySelector('#nuvioHistoryPassword').value = '';
+            profiles = await nuvioProfiles(session.token);
+
+            if (profiles.length === 1) {
+                await finish(Number(profiles[0].profile_index) || 1, submitBtn);
+                return;
+            }
+
+            const select = modal.querySelector('#nuvioHistoryProfileSelect');
+            select.innerHTML = '';
+            profiles.forEach(profile => {
+                const id = Number(profile.profile_index) || 1;
+                const option = document.createElement('option');
+                option.value = String(id);
+                option.textContent = profile.name || `Profile ${id}`;
+                select.appendChild(option);
+            });
+            loginStep.classList.add('hidden');
+            profileStep.classList.remove('hidden');
+            status.classList.add('hidden');
+        } catch (err) {
+            setHistoryStatus('error', err.message || 'Nuvio sign-in failed.');
+        } finally {
+            setBusy(submitBtn, false);
+        }
+    };
+
+    profileBtn.onclick = () => {
+        const profileId = Number(modal.querySelector('#nuvioHistoryProfileSelect').value) || 1;
+        finish(profileId, profileBtn);
+    };
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
 }
 
 // --- Modal UI ---
