@@ -5,10 +5,11 @@ from typing import TypeVar
 from fastapi import HTTPException
 from loguru import logger
 
-from app.api.models.tokens import TokenRequest, TokenResponse, TraktTokens
+from app.api.models.tokens import NuvioTokens, TokenRequest, TokenResponse, TraktTokens
 from app.core.config import settings
 from app.core.security import STORED_SECRET_SENTINEL, mask_stored_secrets, redact_token, secret_hints
 from app.core.settings import LLMConfig, PosterRatingConfig, UserSettings, get_default_settings
+from app.services.nuvio import nuvio_service
 from app.services.simkl import simkl_service
 from app.services.stremio.service import StremioBundle
 from app.services.token_store import token_store
@@ -146,10 +147,14 @@ class AuthService:
             if account_id := await self._verify_simkl_identity(payload.simkl_access_token):
                 identities["simkl"] = account_id
 
+        if payload.nuvio_access_token and payload.nuvio_access_token != STORED_SECRET_SENTINEL:
+            if nuvio_id := await self._verify_nuvio_identity(payload, refresh_expired):
+                identities["nuvio"] = nuvio_id
+
         if not identities:
             raise HTTPException(
                 status_code=400,
-                detail="Could not verify any connected account. Reconnect Stremio, Trakt, or Simkl and try again.",
+                detail="Could not verify any connected account. Reconnect Stremio, Trakt, Simkl, or Nuvio and try again.",
             )
 
         return identities, stremio_auth_key, email
@@ -220,6 +225,60 @@ class AuthService:
         account_id = (info.get("account") or {}).get("id") if isinstance(info, dict) else None
         return str(account_id) if account_id else None
 
+
+    async def _verify_nuvio_identity(self, payload: TokenRequest, refresh_expired: bool) -> str | None:
+        """Verify a Nuvio session and profile, returning a profile-scoped identity."""
+        if identity := await self._fetch_nuvio_identity(payload.nuvio_access_token, payload.nuvio_profile_id):
+            return identity
+
+        if not refresh_expired or not payload.nuvio_refresh_token:
+            return None
+        if not await self._refresh_nuvio_into_payload(payload):
+            return None
+        return await self._fetch_nuvio_identity(payload.nuvio_access_token, payload.nuvio_profile_id)
+
+    async def _fetch_nuvio_identity(self, access_token: str | None, profile_id: int | None) -> str | None:
+        if not access_token or profile_id is None:
+            return None
+        try:
+            user = await nuvio_service.get_user(access_token)
+            user_id = user.get("id") if isinstance(user, dict) else None
+            if not user_id:
+                return None
+            profile = await nuvio_service.get_profile(access_token, profile_id)
+            if not profile:
+                logger.info(f"Nuvio profile {profile_id} was not available to the authenticated user")
+                return None
+            return f"{user_id}:{profile_id}"
+        except Exception as e:
+            logger.info(f"Nuvio identity lookup failed: {e}")
+            return None
+
+    async def _refresh_nuvio_into_payload(self, payload: TokenRequest) -> bool:
+        """Refresh a Nuvio/Supabase session and write the new pair into the payload."""
+        if not payload.nuvio_refresh_token:
+            return False
+        try:
+            data = await nuvio_service.refresh_session(payload.nuvio_refresh_token)
+        except Exception as e:
+            logger.warning(f"Nuvio session refresh during identity verification failed: {e}")
+            return False
+
+        access_token = data.get("access_token") if isinstance(data, dict) else None
+        if not access_token:
+            logger.warning("Nuvio refresh returned no access_token during identity verification")
+            return False
+
+        payload.nuvio_access_token = str(access_token)
+        payload.nuvio_refresh_token = str(data.get("refresh_token") or payload.nuvio_refresh_token)
+        expires_at = data.get("expires_at")
+        if expires_at is None:
+            expires_in = int(data.get("expires_in") or 0)
+            expires_at = int(time.time()) + expires_in if expires_in else 0
+        payload.nuvio_token_expires_at = int(expires_at or 0)
+        logger.info("Refreshed an expired Nuvio session while verifying identity")
+        return True
+
     async def _find_account_token(self, provider: str, provider_user_id: str) -> str | None:
         """Locate the account token for a verified provider identity."""
         token = await token_store.get_token_for_identity(provider, provider_user_id)
@@ -269,6 +328,7 @@ class AuthService:
         """
         # 1. Verify provided credentials and resolve provider identities
         submitted_trakt_token = payload.trakt_access_token
+        submitted_nuvio_token = payload.nuvio_access_token
         identities, stremio_auth_key, resolved_email = await self.resolve_identities(payload, refresh_expired=True)
 
         # 2. Resolve (and possibly merge) the account these identities belong to
@@ -306,7 +366,7 @@ class AuthService:
             if payload.password:
                 payload_to_store["password"] = payload.password.strip()
         elif existing_data:
-            # Re-configuring through Trakt/Simkl alone must not drop the Stremio
+            # Re-configuring through Trakt/Simkl/Nuvio alone must not drop the Stremio
             # credentials already linked to this account.
             for field in ("user_id", "authKey", "password"):
                 if existing_data.get(field):
@@ -359,6 +419,15 @@ class AuthService:
                 if payload.trakt_access_token != submitted_trakt_token
                 else None
             ),
+            refreshedNuvio=(
+                NuvioTokens(
+                    access_token=payload.nuvio_access_token,
+                    refresh_token=payload.nuvio_refresh_token or "",
+                    expires_at=payload.nuvio_token_expires_at or 0,
+                )
+                if payload.nuvio_access_token != submitted_nuvio_token
+                else None
+            ),
         )
         return response, stremio_auth_key, user_settings
 
@@ -388,6 +457,11 @@ class AuthService:
             trakt_refresh_token=unmasked("trakt_refresh_token", payload.trakt_refresh_token),
             trakt_token_expires_at=payload.trakt_token_expires_at,
             simkl_access_token=unmasked("simkl_access_token", payload.simkl_access_token),
+            nuvio_access_token=unmasked("nuvio_access_token", payload.nuvio_access_token),
+            nuvio_refresh_token=unmasked("nuvio_refresh_token", payload.nuvio_refresh_token),
+            nuvio_token_expires_at=payload.nuvio_token_expires_at,
+            nuvio_profile_id=payload.nuvio_profile_id,
+            nuvio_profile_name=payload.nuvio_profile_name,
             watch_history_source=payload.watch_history_source,
         )
 
@@ -440,6 +514,8 @@ class AuthService:
         # display logic is unchanged; any verified identity works otherwise.
         user_id = identities.get("stremio") or next(iter(identities.values()))
         response = {"user_id": user_id, "email": email, "exists": exists}
+        if "nuvio" in identities and payload.nuvio_profile_name:
+            response["display_name"] = f"Nuvio · {payload.nuvio_profile_name}"
 
         if exists and existing_data:
             # Token is the user's manifest key; only returned once they've authenticated
