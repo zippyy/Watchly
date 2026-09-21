@@ -562,7 +562,7 @@ class ProfileService:
         if not app_settings.SIMKL_CLIENT_ID:
             return None
 
-        initial_credentials = await token_store.get_user_data(token)
+        initial_credentials = await token_store.get_user_data_fresh(token)
         initial_settings = (initial_credentials or {}).get("settings") or {}
         initial_access = str(initial_settings.get("simkl_access_token") or "")
 
@@ -577,7 +577,7 @@ class ProfileService:
             # refresh that would invalidate the first worker's token.
             for _ in range(20):
                 await asyncio.sleep(0.15)
-                credentials = await token_store.get_user_data(token)
+                credentials = await token_store.get_user_data_fresh(token)
                 settings_dict = (credentials or {}).get("settings") or {}
                 current = str(settings_dict.get("simkl_access_token") or "")
                 if current and current != initial_access:
@@ -588,7 +588,7 @@ class ProfileService:
         try:
             # Re-read after taking the lock: a previous waiter may have refreshed
             # just before we acquired it.
-            credentials = await token_store.get_user_data(token)
+            credentials = await token_store.get_user_data_fresh(token)
             settings_dict = (credentials or {}).get("settings") or {}
             current_access = str(settings_dict.get("simkl_access_token") or "")
             current_expiry = int(settings_dict.get("simkl_token_expires_at") or 0)
