@@ -20,7 +20,11 @@ def build_nuvio_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     for catalog in nuvio_manifest.get("catalogs", []):
         if not isinstance(catalog, dict):
             continue
-        extras = [extra for extra in (catalog.get("extra") or []) if extra.get("name") != "search"]
+        extras = [
+            extra
+            for extra in (catalog.get("extra") or [])
+            if not (isinstance(extra, dict) and extra.get("name") == "search")
+        ]
         extras.append(copy.deepcopy(_NUVIO_SEARCH_EXTRA))
         catalog["extra"] = extras
     return nuvio_manifest
