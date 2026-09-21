@@ -6,6 +6,7 @@ from .endpoints.dashboard import router as dashboard_router
 from .endpoints.health import router as health_router
 from .endpoints.languages import router as language_router
 from .endpoints.manifest import router as manifest_router
+from .endpoints.nuvio_collection import router as nuvio_collection_router
 from .endpoints.oauth import router as oauth_router
 from .endpoints.stats import router as stats_router
 from .endpoints.status import router as status_router
@@ -21,6 +22,7 @@ async def root():
 
 
 api_router.include_router(manifest_router)
+api_router.include_router(nuvio_collection_router)
 api_router.include_router(catalogs_router)
 api_router.include_router(tokens_router)
 api_router.include_router(health_router)
