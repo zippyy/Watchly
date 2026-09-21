@@ -117,7 +117,14 @@ class UserSettings(BaseModel):
         default=None, description="Epoch seconds when the Trakt access token expires"
     )
     simkl_access_token: str | None = Field(default=None, description="Simkl OAuth access token")
-    watch_history_source: Literal["stremio", "trakt", "simkl"] = Field(
+    nuvio_access_token: str | None = Field(default=None, description="Nuvio Sync access token")
+    nuvio_refresh_token: str | None = Field(default=None, description="Nuvio Sync refresh token")
+    nuvio_token_expires_at: int | None = Field(
+        default=None, description="Epoch seconds when the Nuvio access token expires"
+    )
+    nuvio_profile_id: int | None = Field(default=None, description="Nuvio profile index used for history")
+    nuvio_profile_name: str | None = Field(default=None, description="Nuvio profile display name")
+    watch_history_source: Literal["stremio", "trakt", "simkl", "nuvio"] = Field(
         default="stremio", description="Source for watch history used in profile building"
     )
 
