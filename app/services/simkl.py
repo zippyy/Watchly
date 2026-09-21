@@ -7,6 +7,7 @@ from cachetools import TTLCache
 from loguru import logger
 
 from app.core.base_client import BaseClient
+from app.core.version import __version__
 from app.models.history import WatchHistory, WatchHistoryItem
 
 
@@ -69,26 +70,81 @@ class SimklService:
     async def close(self) -> None:
         await self.client.close()
 
-    async def exchange_code(self, code: str, redirect_uri: str, client_id: str, client_secret: str) -> dict[str, Any]:
-        """Exchange authorization code for an access token."""
+    @staticmethod
+    def _api_params(client_id: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "client_id": client_id,
+            "app-name": "watchly",
+            "app-version": __version__,
+        }
+        if extra:
+            params.update(extra)
+        return params
+
+    @staticmethod
+    def _headers(access_token: str | None = None) -> dict[str, str]:
+        headers = {"User-Agent": f"Watchly/{__version__}"}
+        if access_token:
+            headers["Authorization"] = f"Bearer {access_token}"
+        return headers
+
+    async def exchange_code(
+        self,
+        code: str,
+        redirect_uri: str,
+        client_id: str,
+        client_secret: str,
+        code_verifier: str,
+    ) -> dict[str, Any]:
+        """Exchange an AUTH V2 authorization code using PKCE."""
+        form = {
+            "grant_type": "authorization_code",
+            "client_id": client_id,
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "code_verifier": code_verifier,
+        }
+        if client_secret:
+            form["client_secret"] = client_secret
         return await self.client.post(
-            "/oauth/token",
-            json={
-                "code": code,
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "redirect_uri": redirect_uri,
-                "grant_type": "authorization_code",
+            "/oauth2/token",
+            data=form,
+            headers={
+                **self._headers(),
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+        )
+
+    async def refresh_token(self, refresh_token: str, client_id: str, client_secret: str) -> dict[str, Any]:
+        """Refresh an AUTH V2 access token.
+
+        Simkl refresh tokens are non-rotating, but each refresh invalidates the
+        previous access token immediately, so callers must persist the new access
+        token before allowing subsequent requests to use the grant.
+        """
+        form = {
+            "grant_type": "refresh_token",
+            "client_id": client_id,
+            "refresh_token": refresh_token,
+        }
+        if client_secret:
+            form["client_secret"] = client_secret
+        return await self.client.post(
+            "/oauth2/token",
+            data=form,
+            headers={
+                **self._headers(),
+                "Content-Type": "application/x-www-form-urlencoded",
             },
         )
 
     async def get_user_settings(self, access_token: str, client_id: str) -> dict[str, Any]:
         """Fetch the authenticated user's profile (used to display 'Connected as ...')."""
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "simkl-api-key": client_id,
-        }
-        return await self.client.get("/users/settings", headers=headers)
+        return await self.client.get(
+            "/users/settings",
+            params=self._api_params(client_id),
+            headers=self._headers(access_token),
+        )
 
     async def _fetch_with_semaphore(self, coro):
         """Execute a coroutine with semaphore for rate limiting."""
@@ -97,7 +153,11 @@ class SimklService:
 
     async def get_trending(self, api_key: str):
         try:
-            return await self.client.get("/movies/trending", params={"client_id": api_key})
+            return await self.client.get(
+                "/movies/trending",
+                params=self._api_params(api_key),
+                headers=self._headers(),
+            )
         except httpx.HTTPStatusError as e:
             # 401/403 indicate the user's Simkl token was revoked — let those
             # propagate so callers can clear the token and prompt re-auth.
@@ -121,7 +181,8 @@ class SimklService:
         try:
             result = await self.client.get(
                 f"/{mtype_path}/{simkl_id}",
-                params={"client_id": api_key, "extended": "full"},
+                params=self._api_params(api_key, {"extended": "full"}),
+                headers=self._headers(),
             )
             self._details_cache[cache_key] = result
             return result
@@ -136,15 +197,12 @@ class SimklService:
 
     async def get_history(self, access_token: str, client_id: str) -> WatchHistory:
         """Fetch watch history from Simkl using OAuth access token."""
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {access_token}",
-            "simkl-api-key": client_id,
-        }
+        headers = self._headers(access_token)
+        params = self._api_params(client_id)
 
         results = await asyncio.gather(
-            self.client.get("/sync/all-items/movies", headers=headers),
-            self.client.get("/sync/all-items/shows", headers=headers),
+            self.client.get("/sync/all-items/movies", params=params, headers=headers),
+            self.client.get("/sync/all-items/shows", params=params, headers=headers),
             return_exceptions=True,
         )
 
