@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.core.app import app
-from app.services.nuvio_collection import NUVIO_COLLECTION_ID, build_nuvio_collection
+from app.services.nuvio_collection import NUVIO_COLLECTION_ID, build_nuvio_collection, build_nuvio_manifest
 
 client = TestClient(app)
 
@@ -75,3 +75,37 @@ def test_nuvio_collection_endpoint_uses_tokenized_manifest(monkeypatch):
 def test_nuvio_collection_endpoint_rejects_bad_token():
     response = client.get("/bad.token!/nuvio-collection.json")
     assert response.status_code == 400
+
+
+
+def test_nuvio_manifest_hides_catalog_rows_without_mutating_standard_manifest():
+    manifest = _manifest()
+    original_extras = [dict(catalog) for catalog in manifest["catalogs"]]
+
+    nuvio_manifest = build_nuvio_manifest(manifest)
+
+    assert manifest["catalogs"] == original_extras
+    for catalog in nuvio_manifest["catalogs"]:
+        search_extra = next(extra for extra in catalog["extra"] if extra.get("name") == "search")
+        assert search_extra["isRequired"] is True
+
+
+def test_nuvio_manifest_endpoint_uses_same_tokenized_catalogs(monkeypatch):
+    from app.api.endpoints import manifest as endpoint_module
+
+    async def fake_manifest(token: str):
+        assert token == "abc"
+        return _manifest()
+
+    monkeypatch.setattr(endpoint_module.manifest_service, "get_manifest_for_token", fake_manifest)
+
+    response = client.get("/abc/nuvio-manifest.json")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == "com.bimal.watchly"
+    assert payload["catalogs"]
+    assert all(
+        any(extra.get("name") == "search" and extra.get("isRequired") for extra in catalog.get("extra", []))
+        for catalog in payload["catalogs"]
+    )
