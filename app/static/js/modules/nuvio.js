@@ -153,6 +153,9 @@ async function fetchWatchlyCollection(manifestUrl) {
     if (!collection?.id || !Array.isArray(collection?.folders)) {
         throw new Error('Watchly returned an invalid Nuvio Collection.');
     }
+    if (collection.folders.length === 0) {
+        throw new Error('No Watchly recommendation catalogs are enabled, so there is nothing to add to the For You collection.');
+    }
     return collection;
 }
 
