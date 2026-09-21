@@ -320,13 +320,43 @@ class ProfileService:
                 from app.core.config import settings as app_settings
                 from app.services.simkl import simkl_service
 
+                access_token, _ = await self._ensure_simkl_token_fresh(token, user_settings)
                 try:
                     watch_history = await simkl_service.get_history(
-                        user_settings.simkl_access_token,
+                        access_token,
                         app_settings.SIMKL_CLIENT_ID or "",
                     )
                 except httpx.HTTPStatusError as e:
-                    if e.response.status_code in (401, 403):
+                    if (
+                        e.response.status_code in (401, 403)
+                        and user_settings.simkl_refresh_token
+                        and token
+                    ):
+                        logger.info(f"[{token[:8]}...] Simkl 401/403; attempting AUTH V2 token refresh.")
+                        refreshed = await self._refresh_simkl_token(token, user_settings.simkl_refresh_token)
+                        if refreshed:
+                            try:
+                                watch_history = await simkl_service.get_history(
+                                    refreshed,
+                                    app_settings.SIMKL_CLIENT_ID or "",
+                                )
+                            except httpx.HTTPStatusError as retry_e:
+                                if retry_e.response.status_code in (401, 403):
+                                    token_revoked = True
+                                    logger.error(
+                                        f"Simkl token still rejected after refresh "
+                                        f"(HTTP {retry_e.response.status_code}); reconnect required."
+                                    )
+                                else:
+                                    logger.error(
+                                        f"Simkl history fetch failed after refresh "
+                                        f"(HTTP {retry_e.response.status_code}: {retry_e})."
+                                    )
+                                watch_history = None
+                        else:
+                            token_revoked = True
+                            logger.error("Simkl refresh failed; user must reconnect Simkl.")
+                    elif e.response.status_code in (401, 403):
                         token_revoked = True
                         logger.error(
                             f"Simkl token rejected (HTTP {e.response.status_code}). "
@@ -494,6 +524,109 @@ class ProfileService:
         await user_cache.set_library_buckets(token, content_type, typed)
         return profile, set(), watched_imdb
 
+    async def _ensure_simkl_token_fresh(self, token: str | None, user_settings: UserSettings) -> tuple[str, bool]:
+        """Refresh a Simkl AUTH V2 token when it is within one day of expiry."""
+        import time as _time
+
+        access_token = user_settings.simkl_access_token or ""
+        expires_at = user_settings.simkl_token_expires_at or 0
+        if not (token and user_settings.simkl_refresh_token and expires_at):
+            return access_token, False
+
+        one_day = 24 * 60 * 60
+        if _time.time() < expires_at - one_day:
+            return access_token, False
+
+        logger.info(f"[{token[:8]}...] Simkl token within one-day refresh window.")
+        refreshed = await self._refresh_simkl_token(token, user_settings.simkl_refresh_token)
+        if refreshed:
+            return refreshed, True
+        return access_token, False
+
+    async def _refresh_simkl_token(self, token: str, refresh_token: str) -> str | None:
+        """Refresh and persist a Simkl AUTH V2 access token.
+
+        A Simkl grant has one live access token at a time. Use a short Redis lock
+        so concurrent movie/series catalog requests cannot refresh the same grant
+        independently and invalidate one another.
+        """
+        import asyncio
+        import time as _time
+        import uuid
+
+        from app.core.config import settings as app_settings
+        from app.services.redis_service import redis_service
+        from app.services.simkl import simkl_service
+        from app.services.token_store import token_store
+
+        if not app_settings.SIMKL_CLIENT_ID:
+            return None
+
+        client = await redis_service.get_client()
+        lock_key = f"watchly:simkl-refresh:{token}"
+        lock_value = uuid.uuid4().hex
+        acquired = await client.set(lock_key, lock_value, nx=True, ex=30)
+
+        if not acquired:
+            # Another worker owns the refresh. Give it a moment to persist the
+            # replacement access token, then use that instead of issuing a second
+            # refresh that would invalidate the first worker's token.
+            for _ in range(20):
+                await asyncio.sleep(0.15)
+                credentials = await token_store.get_user_data(token)
+                settings_dict = (credentials or {}).get("settings") or {}
+                current = settings_dict.get("simkl_access_token")
+                if current and current != settings_dict.get("_simkl_refresh_previous_access"):
+                    return str(current)
+            logger.warning(f"[{token[:8]}...] Timed out waiting for concurrent Simkl refresh.")
+            return None
+
+        try:
+            # Re-read after taking the lock: a previous waiter may have refreshed
+            # just before we acquired it.
+            credentials = await token_store.get_user_data(token)
+            settings_dict = (credentials or {}).get("settings") or {}
+            current_access = str(settings_dict.get("simkl_access_token") or "")
+            current_expiry = int(settings_dict.get("simkl_token_expires_at") or 0)
+            if current_access and current_expiry and _time.time() < current_expiry - 60:
+                return current_access
+
+            try:
+                data = await simkl_service.refresh_token(
+                    refresh_token,
+                    app_settings.SIMKL_CLIENT_ID,
+                    app_settings.SIMKL_CLIENT_SECRET or "",
+                )
+            except Exception as e:
+                logger.warning(f"[{token[:8]}...] Simkl refresh call failed: {e}")
+                return None
+
+            new_access = str(data.get("access_token") or "")
+            new_refresh = str(data.get("refresh_token") or refresh_token)
+            expires_in = int(data.get("expires_in") or 0)
+            new_expires_at = int(_time.time()) + expires_in if expires_in else 0
+            if not new_access:
+                logger.warning(f"[{token[:8]}...] Simkl refresh returned no access_token.")
+                return None
+
+            if credentials:
+                settings_dict["simkl_access_token"] = new_access
+                settings_dict["simkl_refresh_token"] = new_refresh
+                settings_dict["simkl_token_expires_at"] = new_expires_at
+                credentials["settings"] = settings_dict
+                await token_store.update_user_data(token, credentials)
+                logger.info(f"[{token[:8]}...] Simkl token refreshed; new expiry={new_expires_at}.")
+
+            return new_access
+        finally:
+            # Delete only our own lock; do not remove a successor's lock if ours
+            # expired and another worker acquired it.
+            try:
+                if await client.get(lock_key) == lock_value:
+                    await client.delete(lock_key)
+            except Exception:
+                pass
+
     async def _ensure_nuvio_token_fresh(self, token: str | None, user_settings: UserSettings) -> tuple[str, bool]:
         """Refresh a Nuvio/Supabase access token shortly before it expires."""
         import time as _time
@@ -639,9 +772,11 @@ class ProfileService:
                         settings_dict[field] = None
                         mutated = True
             elif source == "simkl":
-                if settings_dict.get("simkl_access_token"):
-                    settings_dict["simkl_access_token"] = None
-                    mutated = True
+                for field in ("simkl_access_token", "simkl_refresh_token"):
+                    if settings_dict.get(field):
+                        settings_dict[field] = None
+                        mutated = True
+                settings_dict["simkl_token_expires_at"] = None
             elif source == "nuvio":
                 for field in ("nuvio_access_token", "nuvio_refresh_token"):
                     if settings_dict.get(field):
