@@ -99,7 +99,7 @@ def test_nuvio_manifest_endpoint_uses_same_tokenized_catalogs(monkeypatch):
 
     monkeypatch.setattr(endpoint_module.manifest_service, "get_manifest_for_token", fake_manifest)
 
-    response = client.get("/abc/nuvio-manifest.json")
+    response = client.get("/abc/nuvio/manifest.json")
 
     assert response.status_code == 200
     payload = response.json()
@@ -109,3 +109,21 @@ def test_nuvio_manifest_endpoint_uses_same_tokenized_catalogs(monkeypatch):
         any(extra.get("name") == "search" and extra.get("isRequired") for extra in catalog.get("extra", []))
         for catalog in payload["catalogs"]
     )
+
+
+
+def test_nuvio_catalog_alias_uses_existing_catalog_service(monkeypatch):
+    from app.services.recommendation.catalog_service import catalog_service
+
+    async def fake_get_catalog(token: str, content_type: str, catalog_id: str):
+        assert token == "abc"
+        assert content_type == "movie"
+        assert catalog_id == "watchly.rec"
+        return {"metas": [{"id": "tt1234567", "type": "movie", "name": "Example"}]}, {}
+
+    monkeypatch.setattr(catalog_service, "get_catalog", fake_get_catalog)
+
+    response = client.get("/abc/nuvio/catalog/movie/watchly.rec.json")
+
+    assert response.status_code == 200
+    assert response.json()["metas"][0]["id"] == "tt1234567"
