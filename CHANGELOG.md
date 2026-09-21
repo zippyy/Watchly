@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.14.3 - 2026-09-21
+
+### Fixed
+
+- Nuvio Cloud authentication and sync now use the current documented public endpoint, `https://api.nuvio.tv`, instead of the obsolete Supabase project that can return a database-size quota restriction.
+- Updated the browser-side Nuvio installer/history connector and the server-side Nuvio history client to use Nuvio's current documented publishable client key.
+- The Nuvio backend URL/key remain overrideable through `NUVIO_SUPABASE_URL` and `NUVIO_SUPABASE_KEY` for self-hosted Nuvio deployments.
+
 ## 1.14.2 - 2026-09-21
 
 ### Added

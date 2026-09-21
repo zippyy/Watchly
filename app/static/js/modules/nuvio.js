@@ -5,12 +5,10 @@
 // from the browser (same approach as the community Trakt-Nuvio bridge) and
 // insert the addon row. Credentials and tokens never touch Watchly's servers.
 //
-// This rides on Nuvio's unofficial API: failures are expected eventually, so
-// every error path falls back to "copy the URL and paste it in Nuvio".
-
-const NUVIO_BASE = 'https://dpyhjjcoabcglfmgecug.supabase.co';
-// Public (publishable) client key, same one Nuvio's own web app ships.
-const NUVIO_KEY = 'sb_publishable_zcNkgqGJjBtj8GoRlMvl9A_zkdmXhf5';
+// Nuvio documents this Cloud API endpoint and publishable client key publicly.
+// The key is intentionally client-side; authenticated rows remain protected by RLS.
+const NUVIO_BASE = 'https://api.nuvio.tv';
+const NUVIO_KEY = 'sb_publishable_1Clq8rlTVACkdcZuqr6_AD__xUUC_EN';
 
 const FALLBACK_HINT = 'You can always install manually: copy the manifest URL, then in Nuvio go to Settings → Addons and paste it.';
 
