@@ -233,7 +233,11 @@ export async function recallProviderAccount(provider, tokens) {
     if (provider === 'trakt') {
         payload = { trakt_access_token: tokens.access_token };
     } else if (provider === 'simkl') {
-        payload = { simkl_access_token: tokens.access_token };
+        payload = {
+            simkl_access_token: tokens.access_token,
+            simkl_refresh_token: tokens.refresh_token,
+            simkl_token_expires_at: tokens.expires_at,
+        };
     } else if (provider === 'nuvio') {
         payload = {
             nuvio_access_token: tokens.access_token,
@@ -570,6 +574,8 @@ function restoreWatchHistoryState(settings) {
     if (settings.simkl_access_token && !hasLiveToken('simkl')) {
         window._watchlyOAuth.simkl = {
             access_token: settings.simkl_access_token,
+            refresh_token: settings.simkl_refresh_token || '',
+            expires_at: settings.simkl_token_expires_at || 0,
         };
         const simklSyncStatus = document.getElementById('simklSyncStatus');
         if (simklSyncStatus) {

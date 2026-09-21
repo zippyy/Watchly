@@ -141,6 +141,8 @@ function buildTokenPayload(formData) {
         trakt_refresh_token: window._watchlyOAuth?.trakt?.refresh_token || undefined,
         trakt_token_expires_at: window._watchlyOAuth?.trakt?.expires_at || undefined,
         simkl_access_token: window._watchlyOAuth?.simkl?.access_token || undefined,
+        simkl_refresh_token: window._watchlyOAuth?.simkl?.refresh_token || undefined,
+        simkl_token_expires_at: window._watchlyOAuth?.simkl?.expires_at || undefined,
         nuvio_access_token: window._watchlyOAuth?.nuvio?.access_token || undefined,
         nuvio_refresh_token: window._watchlyOAuth?.nuvio?.refresh_token || undefined,
         nuvio_token_expires_at: window._watchlyOAuth?.nuvio?.expires_at || undefined,
@@ -238,6 +240,15 @@ function initializeFormSubmission() {
                     access_token: data.refreshedTrakt.access_token,
                     refresh_token: data.refreshedTrakt.refresh_token,
                     expires_at: data.refreshedTrakt.expires_at,
+                };
+            }
+
+            if (data.refreshedSimkl) {
+                window._watchlyOAuth = window._watchlyOAuth || {};
+                window._watchlyOAuth.simkl = {
+                    access_token: data.refreshedSimkl.access_token,
+                    refresh_token: data.refreshedSimkl.refresh_token,
+                    expires_at: data.refreshedSimkl.expires_at,
                 };
             }
 

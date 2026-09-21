@@ -5,7 +5,7 @@ from typing import TypeVar
 from fastapi import HTTPException
 from loguru import logger
 
-from app.api.models.tokens import NuvioTokens, TokenRequest, TokenResponse, TraktTokens
+from app.api.models.tokens import NuvioTokens, SimklTokens, TokenRequest, TokenResponse, TraktTokens
 from app.core.config import settings
 from app.core.security import STORED_SECRET_SENTINEL, mask_stored_secrets, redact_token, secret_hints
 from app.core.settings import LLMConfig, PosterRatingConfig, UserSettings, get_default_settings
@@ -144,7 +144,7 @@ class AuthService:
                 identities["trakt"] = slug
 
         if payload.simkl_access_token and payload.simkl_access_token != STORED_SECRET_SENTINEL:
-            if account_id := await self._verify_simkl_identity(payload.simkl_access_token):
+            if account_id := await self._verify_simkl_identity(payload, refresh_expired):
                 identities["simkl"] = account_id
 
         if payload.nuvio_access_token and payload.nuvio_access_token != STORED_SECRET_SENTINEL:
@@ -217,8 +217,20 @@ class AuthService:
         logger.info("Refreshed an expired Trakt token while verifying identity")
         return True
 
-    async def _verify_simkl_identity(self, access_token: str) -> str | None:
-        """Simkl account id for the token, or None if Simkl won't confirm it."""
+    async def _verify_simkl_identity(self, payload: TokenRequest, refresh_expired: bool) -> str | None:
+        """Simkl account id for the payload's AUTH V2 token, with one refresh retry."""
+        if account_id := await self._fetch_simkl_account_id(payload.simkl_access_token):
+            return account_id
+
+        if not refresh_expired or not payload.simkl_refresh_token:
+            return None
+        if not await self._refresh_simkl_into_payload(payload):
+            return None
+        return await self._fetch_simkl_account_id(payload.simkl_access_token)
+
+    async def _fetch_simkl_account_id(self, access_token: str | None) -> str | None:
+        if not access_token or not settings.SIMKL_CLIENT_ID:
+            return None
         try:
             info = await simkl_service.get_user_settings(access_token, settings.SIMKL_CLIENT_ID)
         except Exception as e:
@@ -227,6 +239,32 @@ class AuthService:
 
         account_id = (info.get("account") or {}).get("id") if isinstance(info, dict) else None
         return str(account_id) if account_id else None
+
+    async def _refresh_simkl_into_payload(self, payload: TokenRequest) -> bool:
+        """Refresh a Simkl AUTH V2 token and write the new access token into the payload."""
+        if not payload.simkl_refresh_token or not settings.SIMKL_CLIENT_ID:
+            return False
+        try:
+            data = await simkl_service.refresh_token(
+                payload.simkl_refresh_token,
+                settings.SIMKL_CLIENT_ID,
+                settings.SIMKL_CLIENT_SECRET or "",
+            )
+        except Exception as e:
+            logger.warning(f"Simkl token refresh during identity verification failed: {e}")
+            return False
+
+        access_token = data.get("access_token")
+        if not access_token:
+            logger.warning("Simkl refresh returned no access_token during identity verification")
+            return False
+
+        expires_in = int(data.get("expires_in") or 0)
+        payload.simkl_access_token = str(access_token)
+        payload.simkl_refresh_token = str(data.get("refresh_token") or payload.simkl_refresh_token)
+        payload.simkl_token_expires_at = int(time.time()) + expires_in if expires_in else 0
+        logger.info("Refreshed an expired Simkl AUTH V2 token while verifying identity")
+        return True
 
     async def _verify_nuvio_identity(self, payload: TokenRequest, refresh_expired: bool) -> str | None:
         """Verify a Nuvio session and profile, returning a profile-scoped identity."""
@@ -330,6 +368,7 @@ class AuthService:
         """
         # 1. Verify provided credentials and resolve provider identities
         submitted_trakt_token = payload.trakt_access_token
+        submitted_simkl_token = payload.simkl_access_token
         submitted_nuvio_token = payload.nuvio_access_token
         identities, stremio_auth_key, resolved_email = await self.resolve_identities(payload, refresh_expired=True)
 
@@ -421,6 +460,15 @@ class AuthService:
                 if payload.trakt_access_token != submitted_trakt_token
                 else None
             ),
+            refreshedSimkl=(
+                SimklTokens(
+                    access_token=payload.simkl_access_token,
+                    refresh_token=payload.simkl_refresh_token or "",
+                    expires_at=payload.simkl_token_expires_at or 0,
+                )
+                if payload.simkl_access_token != submitted_simkl_token
+                else None
+            ),
             refreshedNuvio=(
                 NuvioTokens(
                     access_token=payload.nuvio_access_token,
@@ -459,6 +507,8 @@ class AuthService:
             trakt_refresh_token=unmasked("trakt_refresh_token", payload.trakt_refresh_token),
             trakt_token_expires_at=payload.trakt_token_expires_at,
             simkl_access_token=unmasked("simkl_access_token", payload.simkl_access_token),
+            simkl_refresh_token=unmasked("simkl_refresh_token", payload.simkl_refresh_token),
+            simkl_token_expires_at=payload.simkl_token_expires_at,
             nuvio_access_token=unmasked("nuvio_access_token", payload.nuvio_access_token),
             nuvio_refresh_token=unmasked("nuvio_refresh_token", payload.nuvio_refresh_token),
             nuvio_token_expires_at=payload.nuvio_token_expires_at,

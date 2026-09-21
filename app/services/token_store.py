@@ -192,15 +192,16 @@ class TokenStore:
                     except Exception as exc:
                         logger.warning(f"Failed to encrypt {trakt_field} for {redact_token(token)}: {exc}")
 
-        # Encrypt simkl_access_token if present
+        # Encrypt Simkl OAuth tokens if present.
         if storage_data.get("settings") and isinstance(storage_data["settings"], dict):
-            simkl_access_token = storage_data["settings"].get("simkl_access_token")
-            if simkl_access_token:
-                try:
-                    if not simkl_access_token.startswith("gAAAAAB"):
-                        storage_data["settings"]["simkl_access_token"] = self.encrypt_token(simkl_access_token)
-                except Exception as exc:
-                    logger.warning(f"Failed to encrypt simkl_access_token for {redact_token(token)}: {exc}")
+            for simkl_field in ("simkl_access_token", "simkl_refresh_token"):
+                value = storage_data["settings"].get(simkl_field)
+                if value:
+                    try:
+                        if not value.startswith("gAAAAAB"):
+                            storage_data["settings"][simkl_field] = self.encrypt_token(value)
+                    except Exception as exc:
+                        logger.warning(f"Failed to encrypt {simkl_field} for {redact_token(token)}: {exc}")
 
         # Encrypt Nuvio/Supabase session tokens if present. The Nuvio password is
         # never submitted to Watchly; only these session tokens are persisted.
@@ -311,6 +312,18 @@ class TokenStore:
 
         return None
 
+    async def get_user_data_fresh(self, token: str) -> dict[str, Any] | None:
+        """Read user data after dropping this process's local cache entry.
+
+        Used when another worker may just have updated shared Redis state, such
+        as after a distributed OAuth token refresh lock.
+        """
+        try:
+            self._get_user_data_cached.cache_invalidate(token)
+        except (KeyError, AttributeError):
+            pass
+        return await self.get_user_data(token)
+
     async def get_user_data(self, token: str) -> dict[str, Any] | None:
         data = await self._get_user_data_cached(token)
         if data is None:
@@ -413,14 +426,15 @@ class TokenStore:
                     except Exception as e:
                         logger.debug(f"Decryption failed for {trakt_field} associated with {redact_token(token)}: {e}")
 
-            # Decrypt simkl_access_token
-            simkl_access_token = data["settings"].get("simkl_access_token")
-            if simkl_access_token:
-                try:
-                    if simkl_access_token.startswith("gAAAAA"):
-                        data["settings"]["simkl_access_token"] = self.decrypt_token(simkl_access_token)
-                except Exception as e:
-                    logger.debug(f"Decryption failed for simkl_access_token associated with {redact_token(token)}: {e}")
+            # Decrypt Simkl OAuth tokens
+            for simkl_field in ("simkl_access_token", "simkl_refresh_token"):
+                value = data["settings"].get(simkl_field)
+                if value:
+                    try:
+                        if value.startswith("gAAAAA"):
+                            data["settings"][simkl_field] = self.decrypt_token(value)
+                    except Exception as e:
+                        logger.debug(f"Decryption failed for {simkl_field} associated with {redact_token(token)}: {e}")
 
             # Decrypt Nuvio/Supabase session tokens
             for nuvio_field in ("nuvio_access_token", "nuvio_refresh_token"):
