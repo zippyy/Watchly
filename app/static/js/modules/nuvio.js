@@ -80,6 +80,109 @@ async function installToProfile({ token, userId, profileId, manifestUrl }) {
     return 'installed';
 }
 
+const NUVIO_ORIGIN_STORAGE_KEY = 'watchly:nuvio-origin-client-id';
+
+function nuvioOriginClientId() {
+    try {
+        const existing = localStorage.getItem(NUVIO_ORIGIN_STORAGE_KEY);
+        if (existing && /^[A-Za-z0-9_-]{16,96}$/.test(existing)) {
+            return existing;
+        }
+    } catch (e) { /* localStorage can be unavailable in hardened browsers */ }
+
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    const suffix = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    const generated = `watchly-web-${suffix}`;
+
+    try {
+        localStorage.setItem(NUVIO_ORIGIN_STORAGE_KEY, generated);
+    } catch (e) { /* an ephemeral id is still accepted by Nuvio */ }
+
+    return generated;
+}
+
+function collectionUrlFromManifest(manifestUrl) {
+    const url = new URL(manifestUrl, window.location.href);
+    if (!url.pathname.endsWith('/manifest.json')) {
+        throw new Error('Unable to derive the Nuvio Collection URL from this manifest.');
+    }
+    url.pathname = url.pathname.replace(/\/manifest\.json$/, '/nuvio-collection.json');
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+}
+
+async function fetchWatchlyCollection(manifestUrl) {
+    const response = await fetch(collectionUrlFromManifest(manifestUrl), {
+        headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) {
+        throw new Error(`Watchly collection request failed (${response.status})`);
+    }
+    const collection = await response.json();
+    if (!collection?.id || !Array.isArray(collection?.folders)) {
+        throw new Error('Watchly returned an invalid Nuvio Collection.');
+    }
+    return collection;
+}
+
+async function nuvioCollections(token, profileId) {
+    const rows = await nuvioRequest('/rest/v1/rpc/sync_pull_collections', {
+        method: 'POST',
+        token,
+        body: { p_profile_id: profileId },
+    });
+
+    const blob = Array.isArray(rows) ? rows[0] : rows;
+    const value = blob?.collections_json;
+    if (Array.isArray(value)) return value;
+
+    if (typeof value === 'string' && value.trim()) {
+        try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            throw new Error('Nuvio returned malformed collection data.');
+        }
+    }
+
+    return [];
+}
+
+function mergeWatchlyCollection(existing, collection) {
+    const merged = Array.isArray(existing) ? [...existing] : [];
+    const index = merged.findIndex(item => item?.id === collection.id);
+    if (index >= 0) {
+        merged[index] = collection;
+    } else {
+        merged.unshift(collection);
+    }
+    return merged;
+}
+
+async function pushNuvioCollections({ token, profileId, collections }) {
+    await nuvioRequest('/rest/v1/rpc/sync_push_collections', {
+        method: 'POST',
+        token,
+        body: {
+            p_profile_id: profileId,
+            p_collections_json: collections,
+            p_origin_client_id: nuvioOriginClientId(),
+        },
+    });
+}
+
+async function installCollectionToProfile({ token, profileId, manifestUrl }) {
+    const [existing, collection] = await Promise.all([
+        nuvioCollections(token, profileId),
+        fetchWatchlyCollection(manifestUrl),
+    ]);
+    const merged = mergeWatchlyCollection(existing, collection);
+    await pushNuvioCollections({ token, profileId, collections: merged });
+    return existing.some(item => item?.id === collection.id) ? 'updated' : 'created';
+}
+
 // --- Modal UI ---
 
 let modalEl = null;
@@ -176,15 +279,37 @@ export function openNuvioInstall(manifestUrl) {
 
     const finishInstall = async (profileId, button) => {
         setBusy(button, true, 'Installing…');
+        let addonResult = null;
         try {
-            const result = await installToProfile({ ...session, profileId, manifestUrl });
+            addonResult = await installToProfile({ ...session, profileId, manifestUrl });
+        } catch (err) {
+            setStatus('error', `Addon install failed: ${err.message}. ${FALLBACK_HINT}`);
+            setBusy(button, false);
+            return;
+        }
+
+        try {
+            setBusy(button, true, 'Creating For You…');
+            const collectionResult = await installCollectionToProfile({
+                token: session.token,
+                profileId,
+                manifestUrl,
+            });
             loginStep.classList.add('hidden');
             profileStep.classList.add('hidden');
-            setStatus('success', result === 'already-installed'
-                ? 'Watchly is already installed on this Nuvio profile.'
-                : 'Installed! Watchly will appear in Nuvio after its next sync (reopen the app if needed).');
+
+            const addonText = addonResult === 'already-installed' ? 'Watchly was already installed' : 'Watchly was installed';
+            const collectionText = collectionResult === 'updated'
+                ? 'its For You collection was updated'
+                : 'its For You collection was created';
+            setStatus('success', `${addonText}, and ${collectionText}. Reopen Nuvio if it does not appear after the next sync.`);
         } catch (err) {
-            setStatus('error', `Install failed: ${err.message}. ${FALLBACK_HINT}`);
+            loginStep.classList.add('hidden');
+            profileStep.classList.add('hidden');
+            setStatus(
+                'error',
+                `Watchly was installed, but the For You collection could not be synced: ${err.message}. You can retry Install on Nuvio safely; it will update rather than duplicate the collection.`
+            );
         } finally {
             setBusy(button, false);
         }
