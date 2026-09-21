@@ -54,13 +54,31 @@ async function nuvioProfiles(token) {
     return Array.isArray(profiles) && profiles.length ? profiles : [{ profile_index: 1, name: 'Default' }];
 }
 
-async function installToProfile({ token, userId, profileId, manifestUrl }) {
-    const params = `select=url,sort_order&user_id=eq.${encodeURIComponent(userId)}&profile_id=eq.${profileId}`;
+async function installToProfile({ token, userId, profileId, manifestUrl, legacyManifestUrl }) {
+    const params = `select=id,url,sort_order&user_id=eq.${encodeURIComponent(userId)}&profile_id=eq.${profileId}`;
     const existing = await nuvioRequest(`/rest/v1/addons?${params}`, { token });
     const rows = Array.isArray(existing) ? existing : [];
 
     if (rows.some(row => row.url === manifestUrl)) {
         return 'already-installed';
+    }
+
+    const legacy = legacyManifestUrl ? rows.find(row => row.url === legacyManifestUrl && row.id) : null;
+    if (legacy) {
+        await nuvioRequest(
+            `/rest/v1/addons?id=eq.${encodeURIComponent(legacy.id)}&user_id=eq.${encodeURIComponent(userId)}&profile_id=eq.${profileId}`,
+            {
+                method: 'PATCH',
+                token,
+                headers: { Prefer: 'return=minimal' },
+                body: {
+                    url: manifestUrl,
+                    name: 'Watchly',
+                    enabled: true,
+                },
+            }
+        );
+        return 'updated';
     }
 
     const sortOrder = rows.reduce((max, row) => Math.max(max, Number(row.sort_order) || 0), 0) + 1;
@@ -100,6 +118,17 @@ function nuvioOriginClientId() {
     } catch (e) { /* an ephemeral id is still accepted by Nuvio */ }
 
     return generated;
+}
+
+function nuvioManifestUrlFromManifest(manifestUrl) {
+    const url = new URL(manifestUrl, window.location.href);
+    if (!url.pathname.endsWith('/manifest.json')) {
+        throw new Error('Unable to derive the Nuvio manifest URL from this manifest.');
+    }
+    url.pathname = url.pathname.replace(/\/manifest\.json$/, '/nuvio-manifest.json');
+    url.search = '';
+    url.hash = '';
+    return url.toString();
 }
 
 function collectionUrlFromManifest(manifestUrl) {
@@ -267,6 +296,7 @@ function setBusy(button, busy, busyText) {
 export function openNuvioInstall(manifestUrl) {
     if (!manifestUrl) return;
     const modal = ensureModal();
+    const nuvioManifestUrl = nuvioManifestUrlFromManifest(manifestUrl);
 
     const loginStep = modal.querySelector('#nuvioLoginStep');
     const profileStep = modal.querySelector('#nuvioProfileStep');
@@ -281,7 +311,12 @@ export function openNuvioInstall(manifestUrl) {
         setBusy(button, true, 'Installing…');
         let addonResult = null;
         try {
-            addonResult = await installToProfile({ ...session, profileId, manifestUrl });
+            addonResult = await installToProfile({
+                ...session,
+                profileId,
+                manifestUrl: nuvioManifestUrl,
+                legacyManifestUrl: manifestUrl,
+            });
         } catch (err) {
             setStatus('error', `Addon install failed: ${err.message}. ${FALLBACK_HINT}`);
             setBusy(button, false);
@@ -298,7 +333,11 @@ export function openNuvioInstall(manifestUrl) {
             loginStep.classList.add('hidden');
             profileStep.classList.add('hidden');
 
-            const addonText = addonResult === 'already-installed' ? 'Watchly was already installed' : 'Watchly was installed';
+            const addonText = addonResult === 'already-installed'
+                ? 'Watchly was already installed'
+                : addonResult === 'updated'
+                    ? 'Watchly was switched to Collection mode'
+                    : 'Watchly was installed in Collection mode';
             const collectionText = collectionResult === 'updated'
                 ? 'its For You collection was updated'
                 : 'its For You collection was created';
