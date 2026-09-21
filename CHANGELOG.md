@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.14.4 - 2026-09-21
+
+### Fixed
+
+- Migrated Simkl sign-in from the retired AUTH V1 URL to Simkl **AUTH V2** at `/oauth2/authorize`.
+- Added required PKCE S256 challenge/verifier handling and validates Simkl's callback issuer and OAuth state.
+- Exchanges authorization codes and refresh tokens through `https://api.simkl.com/oauth2/token` using form-encoded AUTH V2 requests.
+- Persists Simkl refresh tokens encrypted at rest and automatically refreshes 7-day access tokens before expiry or after a `401`.
+- Serializes Simkl refreshes with a Redis lock so concurrent catalog requests cannot invalidate each other's access tokens.
+- Simkl API calls now include the current required `client_id`, `app-name`, `app-version`, and `User-Agent` values.
+- Added Trakt/Simkl OAuth variables to `.env.example`.
+
 ## 1.14.3 - 2026-09-21
 
 ### Fixed
