@@ -154,7 +154,10 @@ class AuthService:
         if not identities:
             raise HTTPException(
                 status_code=400,
-                detail="Could not verify any connected account. Reconnect Stremio, Trakt, Simkl, or Nuvio and try again.",
+                detail=(
+                    "Could not verify any connected account. "
+                    "Reconnect Stremio, Trakt, Simkl, or Nuvio and try again."
+                ),
             )
 
         return identities, stremio_auth_key, email
@@ -224,7 +227,6 @@ class AuthService:
 
         account_id = (info.get("account") or {}).get("id") if isinstance(info, dict) else None
         return str(account_id) if account_id else None
-
 
     async def _verify_nuvio_identity(self, payload: TokenRequest, refresh_expired: bool) -> str | None:
         """Verify a Nuvio session and profile, returning a profile-scoped identity."""
