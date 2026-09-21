@@ -8,6 +8,8 @@ router = APIRouter()
 
 @router.get("/{token}/catalog/{type}/{id}.json")
 @router.get("/{token}/catalog/{type}/{id}/{extra}.json")
+@router.get("/{token}/nuvio/catalog/{type}/{id}.json")
+@router.get("/{token}/nuvio/catalog/{type}/{id}/{extra}.json")
 async def get_catalog(response: Response, type: str, id: str, token: str, extra: str | None = None) -> dict:
     if type not in ("movie", "series"):
         raise HTTPException(status_code=400, detail="Invalid content type. Must be 'movie' or 'series'.")
