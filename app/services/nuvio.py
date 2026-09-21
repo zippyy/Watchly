@@ -53,7 +53,12 @@ class NuvioService:
         return data if isinstance(data, list) else []
 
     async def get_profile(self, access_token: str, profile_id: int) -> dict[str, Any] | None:
-        for profile in await self.get_profiles(access_token):
+        profiles = await self.get_profiles(access_token)
+        if not profiles and profile_id == 1:
+            # Nuvio's clients treat an empty profile table as the implicit
+            # default profile; mirror that behavior for fresh accounts.
+            return {"profile_index": 1, "name": "Default"}
+        for profile in profiles:
             try:
                 current = int(profile.get("profile_index") or 0)
             except (TypeError, ValueError):
