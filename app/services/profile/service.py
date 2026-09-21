@@ -333,7 +333,11 @@ class ProfileService:
                         and token
                     ):
                         logger.info(f"[{token[:8]}...] Simkl 401/403; attempting AUTH V2 token refresh.")
-                        refreshed = await self._refresh_simkl_token(token, user_settings.simkl_refresh_token)
+                        refreshed = await self._refresh_simkl_token(
+                            token,
+                            user_settings.simkl_refresh_token,
+                            force=True,
+                        )
                         if refreshed:
                             try:
                                 watch_history = await simkl_service.get_history(
@@ -543,7 +547,7 @@ class ProfileService:
             return refreshed, True
         return access_token, False
 
-    async def _refresh_simkl_token(self, token: str, refresh_token: str) -> str | None:
+    async def _refresh_simkl_token(self, token: str, refresh_token: str, force: bool = False) -> str | None:
         """Refresh and persist a Simkl AUTH V2 access token.
 
         A Simkl grant has one live access token at a time. Use a short Redis lock
@@ -592,7 +596,9 @@ class ProfileService:
             settings_dict = (credentials or {}).get("settings") or {}
             current_access = str(settings_dict.get("simkl_access_token") or "")
             current_expiry = int(settings_dict.get("simkl_token_expires_at") or 0)
-            if current_access and current_expiry and _time.time() < current_expiry - 60:
+            if current_access and current_access != initial_access:
+                return current_access
+            if not force and current_access and current_expiry and _time.time() < current_expiry - 60:
                 return current_access
 
             try:
