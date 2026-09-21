@@ -125,7 +125,7 @@ function nuvioManifestUrlFromManifest(manifestUrl) {
     if (!url.pathname.endsWith('/manifest.json')) {
         throw new Error('Unable to derive the Nuvio manifest URL from this manifest.');
     }
-    url.pathname = url.pathname.replace(/\/manifest\.json$/, '/nuvio-manifest.json');
+    url.pathname = url.pathname.replace(/\/manifest\.json$/, '/nuvio/manifest.json');
     url.search = '';
     url.hash = '';
     return url.toString();
