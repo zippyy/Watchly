@@ -93,6 +93,7 @@ jinja_env.filters["tojson"] = lambda v: json.dumps(v)
 @app.get("/", response_class=HTMLResponse)
 @app.get("/configure", response_class=HTMLResponse)
 @app.get("/{token}/configure", response_class=HTMLResponse)
+@app.get("/{token}/nuvio/configure", response_class=HTMLResponse)
 async def configure_page(request: Request, _token: str | None = None):
     languages = []
     try:
