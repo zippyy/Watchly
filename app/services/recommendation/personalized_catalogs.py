@@ -10,11 +10,7 @@ from app.models.library import LibraryCollection, StremioLibraryItem
 from app.models.profile import TasteProfile
 from app.services.profile.scorer import ProfileScorer
 from app.services.profile.service import ProfileService
-from app.services.recommendation.filtering import (
-    RecommendationFiltering,
-    build_discover_params,
-    filter_watched_by_imdb,
-)
+from app.services.recommendation.filtering import RecommendationFiltering, build_discover_params, filter_watched_by_imdb
 from app.services.recommendation.metadata import RecommendationMetadata
 from app.services.recommendation.scoring import RecommendationScoring
 from app.services.recommendation.utils import content_type_to_mtype, resolve_tmdb_id
@@ -60,12 +56,7 @@ class PersonalizedCatalogService:
             "watched": [i for i in library_items.watched if i.type == content_type],
         }
 
-        recent_ids = {
-            item.id
-            for items in buckets.values()
-            for item in items
-            if self._last_watched(item) >= cutoff
-        }
+        recent_ids = {item.id for items in buckets.values() for item in items if self._last_watched(item) >= cutoff}
 
         if not recent_ids:
             all_recent = sorted(
@@ -150,11 +141,7 @@ class PersonalizedCatalogService:
             *(resolve_tmdb_id(item.id, self.tmdb_service) for item in added),
             return_exceptions=True,
         )
-        candidates = [
-            {"id": tmdb_id}
-            for tmdb_id in resolved
-            if isinstance(tmdb_id, int)
-        ]
+        candidates = [{"id": tmdb_id} for tmdb_id in resolved if isinstance(tmdb_id, int)]
         return await self._enrich_and_rank(
             candidates,
             profile,
@@ -240,19 +227,14 @@ class PersonalizedCatalogService:
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         candidates = [
-            item
-            for result in results
-            if not isinstance(result, Exception)
-            for item in result.get("results", [])
+            item for result in results if not isinstance(result, Exception) for item in result.get("results", [])
         ]
 
         low_popularity = [item for item in candidates if float(item.get("popularity") or 0) <= 120.0]
         if len(low_popularity) >= max(10, limit):
             candidates = low_popularity
         else:
-            candidates = sorted(candidates, key=lambda item: float(item.get("popularity") or 0))[
-                : max(60, limit * 3)
-            ]
+            candidates = sorted(candidates, key=lambda item: float(item.get("popularity") or 0))[: max(60, limit * 3)]
 
         return await self._enrich_and_rank(
             candidates,
@@ -302,10 +284,7 @@ class PersonalizedCatalogService:
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         candidates = [
-            item
-            for result in results
-            if not isinstance(result, Exception)
-            for item in result.get("results", [])
+            item for result in results if not isinstance(result, Exception) for item in result.get("results", [])
         ]
 
         return await self._enrich_and_rank(
@@ -350,10 +329,7 @@ class PersonalizedCatalogService:
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         candidates = [
-            item
-            for result in results
-            if not isinstance(result, Exception)
-            for item in result.get("results", [])
+            item for result in results if not isinstance(result, Exception) for item in result.get("results", [])
         ]
 
         return await self._enrich_and_rank(
