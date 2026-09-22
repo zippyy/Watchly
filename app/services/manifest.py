@@ -6,11 +6,11 @@ from loguru import logger
 
 from app.core.config import settings
 from app.core.security import redact_token
-from app.core.settings import UserSettings, resolve_tmdb_api_key
+from app.core.settings import UserSettings, resolve_tmdb_api_key, watch_history_source_key
 from app.core.version import __version__
 from app.models.library import LibraryCollection
 from app.services.catalog_definitions import DynamicCatalogService, sort_catalogs
-from app.services.context import fetch_library_for_source, load_user_context
+from app.services.context import fetch_library_for_sources, load_user_context
 from app.services.profile.service import ProfileService
 from app.services.stremio.service import StremioBundle
 from app.services.translation import apply_catalog_translation
@@ -60,15 +60,15 @@ class ManifestService:
 
         Called during token creation to pre-cache data so manifest generation is fast.
         """
-        # Cache the library from the user's configured source (Trakt/Simkl/Stremio),
-        # not always Stremio. Tagging the bootstrap cache as "stremio" for a Trakt/
-        # Simkl user made load_user_context see a source mismatch and re-fetch the
-        # whole external history on every manifest request (#144).
-        source = user_settings.watch_history_source
-        logger.info(f"[{redact_token(token)}] Fetching library items from '{source}' for caching")
-        library_items = await fetch_library_for_source(source, user_settings, token, bundle, auth_key)
+        # Bootstrap the same merged library that request-time context loading uses.
+        # After multi-source support was added, this code still called the removed
+        # single-source helper and could no longer pre-cache profiles correctly.
+        sources = user_settings.watch_history_sources
+        source_key = watch_history_source_key(sources)
+        logger.info(f"[{redact_token(token)}] Fetching library items from {sources} for caching")
+        library_items = await fetch_library_for_sources(sources, user_settings, token, bundle, auth_key)
         if library_items is None:
-            library_items = LibraryCollection()
+            library_items = LibraryCollection(source=source_key)
         await user_cache.set_library_items(token, library_items)
         logger.debug(f"[{redact_token(token)}] Cached library items (source={library_items.source})")
 
@@ -112,14 +112,15 @@ class ManifestService:
         ctx = await load_user_context(token, require_auth=False)
         fetched_catalogs: list[dict[str, Any]] = []
         try:
-            # Trakt/Simkl-only accounts have no Stremio auth key but their
-            # external library still drives the dynamic catalogs.
-            if ctx.auth_key or ctx.user_settings.watch_history_source in ("trakt", "simkl"):
-                tmdb_key = resolve_tmdb_api_key(ctx.user_settings)
-                catalog_def_service = DynamicCatalogService(language=ctx.user_settings.language, tmdb_api_key=tmdb_key)
-                fetched_catalogs = await catalog_def_service.get_dynamic_catalogs(
-                    ctx.library, ctx.user_settings, token=token
-                )
+            # Catalog generation is provider-agnostic once load_user_context has
+            # resolved the selected history sources into ctx.library. Do not gate
+            # this on Stremio auth or a legacy single-source value: Nuvio-only and
+            # arbitrary multi-source installs need the same catalog definitions.
+            tmdb_key = resolve_tmdb_api_key(ctx.user_settings)
+            catalog_def_service = DynamicCatalogService(language=ctx.user_settings.language, tmdb_api_key=tmdb_key)
+            fetched_catalogs = await catalog_def_service.get_dynamic_catalogs(
+                ctx.library, ctx.user_settings, token=token
+            )
         except Exception as e:
             logger.exception(f"[{redact_token(token)}] Dynamic catalog build failed: {e}")
             fetched_catalogs = []
