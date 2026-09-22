@@ -14,10 +14,12 @@ const ACTIVE_BORDER_CLASS = 'border-white/20';
 const INACTIVE_CLASSES = ['text-slate-400', 'hover:text-white', 'hover:bg-white/5'];
 const INACTIVE_BORDER_CLASS = 'border-transparent';
 
+const SOURCE_ORDER = ['stremio', 'trakt', 'simkl', 'nuvio'];
 const PROVIDER_LABELS = { stremio: 'Stremio', trakt: 'Trakt', simkl: 'Simkl', nuvio: 'Nuvio' };
 
 let switchSectionFn = null;
 const connectedState = { stremio: false, trakt: false, simkl: false, nuvio: false };
+let selectedSources = new Set(['stremio']);
 
 export function initializeAccountsUI({ switchSection } = {}) {
     switchSectionFn = switchSection || null;
@@ -30,6 +32,7 @@ export function initializeAccountsUI({ switchSection } = {}) {
         link.addEventListener('click', () => goToAccounts());
     });
 
+    syncSourceInputs();
     syncAccountsNextButton();
 }
 
@@ -38,12 +41,14 @@ export function setStremioConnected(connected) {
     setProviderDot('stremio', connected);
     setProviderView('stremio', connected);
 
-    if (!connected && currentSource() === 'stremio') {
-        // External providers are independent accounts. Logging out of Stremio
-        // must not visually disconnect Trakt, Simkl, or Nuvio.
-        setWatchHistorySource(firstConnectedSource());
+    if (connected) {
+        selectedSources.add('stremio');
+    } else {
+        selectedSources.delete('stremio');
+        ensureAtLeastOneConnectedSource();
     }
 
+    syncSourceInputs();
     syncAccountsNextButton();
 }
 
@@ -59,45 +64,69 @@ export function setProviderConnected(provider, connected) {
     setProviderView(provider, connected);
 
     if (connected) {
-        // Trakt/Simkl/Nuvio alone is enough to configure the addon — no Stremio needed.
         unlockNavigation();
+        selectedSources.add(provider);
+        if (!connectedState.stremio) selectedSources.delete('stremio');
+    } else {
+        selectedSources.delete(provider);
+        ensureAtLeastOneConnectedSource();
     }
 
-    if (connected && !connectedState.stremio && currentSource() === 'stremio') {
-        // No Stremio session to read history from — use the provider that just connected.
-        setWatchHistorySource(provider);
-    }
-
-    if (!connected && currentSource() === provider) {
-        setWatchHistorySource(firstConnectedSource());
-    }
-
+    syncSourceInputs();
     syncAccountsNextButton();
 }
 
+function ensureAtLeastOneConnectedSource() {
+    if (selectedSources.size > 0) return;
+    const fallback = firstConnectedSource();
+    if (fallback) selectedSources.add(fallback);
+}
+
 function firstConnectedSource() {
-    if (connectedState.stremio) return 'stremio';
-    if (connectedState.trakt) return 'trakt';
-    if (connectedState.simkl) return 'simkl';
-    if (connectedState.nuvio) return 'nuvio';
-    return 'stremio';
+    return SOURCE_ORDER.find(source => connectedState[source]) || null;
+}
+
+export function getWatchHistorySources() {
+    return SOURCE_ORDER.filter(source => selectedSources.has(source));
+}
+
+export function setWatchHistorySources(values) {
+    const requested = Array.isArray(values) ? values : [];
+    selectedSources = new Set(SOURCE_ORDER.filter(source => requested.includes(source)));
+    syncSourceInputs();
 }
 
 export function setWatchHistorySource(value) {
-    const hidden = document.getElementById('watchHistorySource');
-    if (hidden) hidden.value = value;
+    setWatchHistorySources(value ? [value] : []);
+}
+
+function syncSourceInputs() {
+    const sources = getWatchHistorySources();
+    const hiddenSources = document.getElementById('watchHistorySources');
+    const hiddenLegacy = document.getElementById('watchHistorySource');
+    if (hiddenSources) hiddenSources.value = sources.join(',');
+    if (hiddenLegacy) hiddenLegacy.value = sources[0] || '';
+
     document.querySelectorAll('.source-btn').forEach(btn => {
-        applyActive(btn, btn.dataset.sourceBtn === value);
+        const active = selectedSources.has(btn.dataset.sourceBtn);
+        applyActive(btn, active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
 }
 
 function onSourceButtonClick(provider) {
     if (!connectedState[provider]) {
-        showToast(`Connect ${PROVIDER_LABELS[provider]} in Accounts to use it as your watch history source.`, 'info', 4000);
+        showToast('Connect ' + PROVIDER_LABELS[provider] + ' in Accounts to use its watch history.', 'info', 4000);
         goToAccounts(provider);
         return;
     }
-    setWatchHistorySource(provider);
+
+    if (selectedSources.has(provider)) {
+        selectedSources.delete(provider);
+    } else {
+        selectedSources.add(provider);
+    }
+    syncSourceInputs();
 }
 
 function goToAccounts(scrollTo) {
@@ -124,11 +153,6 @@ function setProviderView(provider, connected) {
     const connectedEl = document.querySelector(`[data-provider-view="connected"][data-provider-for="${provider}"]`);
     if (disconnected) disconnected.classList.toggle('hidden', connected);
     if (connectedEl) connectedEl.classList.toggle('hidden', !connected);
-}
-
-function currentSource() {
-    const hidden = document.getElementById('watchHistorySource');
-    return hidden ? hidden.value : '';
 }
 
 function applyActive(btn, isActive) {
