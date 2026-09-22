@@ -67,6 +67,30 @@ class NuvioService:
                 return profile
         return None
 
+    async def get_library_items(self, access_token: str, profile_id: int) -> list[dict[str, Any]]:
+        """Fetch the complete Nuvio cloud library for a profile."""
+        items: list[dict[str, Any]] = []
+        limit = 500
+        offset = 0
+        for _ in range(200):
+            batch = await self.client.post(
+                "/rest/v1/rpc/sync_pull_library",
+                json={"p_profile_id": profile_id, "p_limit": limit, "p_offset": offset},
+                headers=self._headers(access_token),
+            )
+            rows = batch if isinstance(batch, list) else []
+            items.extend(row for row in rows if isinstance(row, dict))
+            if len(rows) < limit:
+                break
+            offset += limit
+        else:
+            logger.warning(f"Nuvio library reached safety cap for profile {profile_id} ({len(items)} rows)")
+        return items
+
+    async def get_watched_items(self, access_token: str, profile_id: int) -> list[dict[str, Any]]:
+        """Public title/episode watched rows used by one-way sync integrations."""
+        return await self._get_watched_items(access_token, profile_id)
+
     async def _get_watched_items(self, access_token: str, profile_id: int) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         for page in range(1, MAX_WATCHED_PAGES + 1):
