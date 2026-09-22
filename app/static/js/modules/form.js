@@ -12,7 +12,7 @@ import {
 import { initializeSuccessActions, showSuccessSection } from './form-success.js';
 import { initializeYearSliderControl } from './year-slider.js';
 import { MOVIE_GENRES, SERIES_GENRES } from '../constants.js';
-import { setProviderConnected } from './accounts.js';
+import { getWatchHistorySources, setProviderConnected } from './accounts.js';
 import { recallProviderAccount } from './auth.js';
 import { openNuvioHistoryConnect } from './nuvio.js';
 
@@ -95,7 +95,8 @@ function getRequestPayload() {
         llm_model: document.getElementById('llmModel')?.value.trim() || '',
         excluded_movie_genres: Array.from(document.querySelectorAll('input[name="movie-genre"]:checked')).map(cb => cb.value),
         excluded_series_genres: Array.from(document.querySelectorAll('input[name="series-genre"]:checked')).map(cb => cb.value),
-        watch_history_source: document.getElementById('watchHistorySource')?.value || 'stremio',
+        watch_history_sources: getWatchHistorySources(),
+        watch_history_source: getWatchHistorySources()[0] || 'stremio',
     };
 }
 
@@ -137,6 +138,7 @@ function buildTokenPayload(formData) {
         excluded_movie_genres: formData.excluded_movie_genres,
         excluded_series_genres: formData.excluded_series_genres,
         watch_history_source: formData.watch_history_source,
+        watch_history_sources: formData.watch_history_sources,
         trakt_access_token: window._watchlyOAuth?.trakt?.access_token || undefined,
         trakt_refresh_token: window._watchlyOAuth?.trakt?.refresh_token || undefined,
         trakt_token_expires_at: window._watchlyOAuth?.trakt?.expires_at || undefined,
@@ -164,19 +166,26 @@ function validateFormData(formData) {
         return false;
     }
 
-    if (formData.watch_history_source === 'stremio' && !hasStremio) {
-        showError('generalError', 'Login with Stremio, or pick Trakt/Simkl/Nuvio as your watch history source.');
-        switchSection('login');
+    const selectedSources = Array.isArray(formData.watch_history_sources)
+        ? formData.watch_history_sources
+        : [];
+    if (selectedSources.length === 0) {
+        showError('generalError', 'Select at least one watch history source.');
         return false;
     }
 
-    const externalAvailability = { trakt: hasTrakt, simkl: hasSimkl, nuvio: hasNuvio };
-    if (formData.watch_history_source in externalAvailability
-        && !externalAvailability[formData.watch_history_source]) {
-        const label = formData.watch_history_source === 'nuvio'
+    const availability = {
+        stremio: hasStremio,
+        trakt: hasTrakt,
+        simkl: hasSimkl,
+        nuvio: hasNuvio,
+    };
+    const unavailable = selectedSources.filter(source => !availability[source]);
+    if (unavailable.length > 0) {
+        const labels = unavailable.map(source => source === 'nuvio'
             ? 'Nuvio'
-            : formData.watch_history_source.charAt(0).toUpperCase() + formData.watch_history_source.slice(1);
-        showError('generalError', `Connect ${label}, or choose another watch history source.`);
+            : source.charAt(0).toUpperCase() + source.slice(1));
+        showError('generalError', 'Reconnect or deselect: ' + labels.join(', ') + '.');
         switchSection('login');
         return false;
     }
