@@ -27,6 +27,13 @@ def test_configure_page_bootstraps_current_year_and_year_defaults(monkeypatch):
     assert 'id="yearMax" min="1970"' in html
 
 
+def test_nuvio_manifest_configure_route_alias_renders_configure_page():
+    response = client.get("/tok123/nuvio/configure")
+
+    assert response.status_code == 200
+    assert "Watch History Sources" in response.text
+
+
 def test_configure_page_exposes_multi_source_history_selector():
     response = client.get("/configure")
 
