@@ -8,7 +8,13 @@ from loguru import logger
 from app.api.models.tokens import NuvioTokens, SimklTokens, TokenRequest, TokenResponse, TraktTokens
 from app.core.config import settings
 from app.core.security import STORED_SECRET_SENTINEL, mask_stored_secrets, redact_token, secret_hints
-from app.core.settings import LLMConfig, PosterRatingConfig, UserSettings, get_default_settings
+from app.core.settings import (
+    LLMConfig,
+    PosterRatingConfig,
+    UserSettings,
+    get_default_settings,
+    normalize_watch_history_sources,
+)
 from app.services.nuvio import nuvio_service
 from app.services.simkl import simkl_service
 from app.services.stremio.service import StremioBundle
@@ -384,15 +390,18 @@ class AuthService:
         stored_identities = dict((existing_data or {}).get("identities") or {})
         stored_identities.update(identities)
 
-        # The source is checked against the linked set, not just this submit: the
-        # account was already reached through a verified identity, and the
-        # configure page submits a masked token for a provider it can't re-verify.
-        if payload.watch_history_source not in stored_identities:
-            provider = payload.watch_history_source
+        # Every selected source must belong to this linked account. The linked set
+        # includes identities from earlier configurations because the configure
+        # page submits masked provider tokens it cannot re-verify client-side.
+        missing_sources = [
+            provider for provider in payload.watch_history_sources if provider not in stored_identities
+        ]
+        if missing_sources:
+            names = ", ".join(provider.capitalize() for provider in missing_sources)
             raise HTTPException(
                 status_code=400,
-                detail=f"Could not verify your {provider.capitalize()} account, "
-                f"which is set as your watch history source. Reconnect it and try again.",
+                detail=f"Could not verify the selected watch history source(s): {names}. "
+                "Reconnect them or deselect them and try again.",
             )
 
         user_settings = self._build_user_settings(payload, (existing_data or {}).get("settings"))
@@ -421,23 +430,26 @@ class AuthService:
         for provider, provider_user_id in stored_identities.items():
             await token_store.set_identity(provider, provider_user_id, token)
 
-        # If watch_history_source changed (or any other setting that affects
-        # the profile), drop cached profiles so the next catalog request
-        # rebuilds from the new source instead of serving the stale cache.
+        # If the selected source set changed, drop derived state so the next
+        # catalog request rebuilds from the newly merged history.
         if existing_data:
             try:
                 from app.services.user_cache import user_cache as _user_cache
 
                 old_settings = existing_data.get("settings") or {}
-                old_source = old_settings.get("watch_history_source", "stremio")
-                if old_source != user_settings.watch_history_source:
+                old_sources = normalize_watch_history_sources(
+                    old_settings.get("watch_history_sources"),
+                    old_settings.get("watch_history_source", "stremio"),
+                )
+                if old_sources != user_settings.watch_history_sources:
                     for ct in ("movie", "series"):
                         await _user_cache.invalidate_profile(token, ct)
                         await _user_cache.invalidate_watched_sets(token, ct)
+                    await _user_cache.invalidate_library_items(token)
                     await _user_cache.invalidate_all_catalogs(token)
                     logger.info(
-                        f"[{redact_token(token)}] watch_history_source changed "
-                        f"'{old_source}' -> '{user_settings.watch_history_source}'; cleared profile/catalog caches."
+                        f"[{redact_token(token)}] watch history sources changed "
+                        f"{old_sources} -> {user_settings.watch_history_sources}; cleared derived caches."
                     )
             except Exception as e:
                 logger.warning(f"[{redact_token(token)}] Failed to invalidate caches on source change: {e}")
@@ -515,6 +527,7 @@ class AuthService:
             nuvio_profile_id=payload.nuvio_profile_id,
             nuvio_profile_name=payload.nuvio_profile_name,
             watch_history_source=payload.watch_history_source,
+            watch_history_sources=payload.watch_history_sources,
         )
 
     @staticmethod
