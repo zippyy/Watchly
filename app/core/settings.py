@@ -202,13 +202,16 @@ CATALOG_DESCRIPTIONS = {
         "Ranks titles you saved but have not watched yet by how strongly they match your Watchly taste profile."
     ),
     "watchly.recent": (
-        "Builds a separate short-term taste profile from roughly your last 60 days of viewing and recommends from it."
+        "Builds a separate short-term taste profile from roughly your last 60 days of viewing "
+        "and recommends from it."
     ),
     "watchly.hidden": (
-        "High-quality, lower-popularity titles that strongly match your profile but are less likely to surface normally."
+        "High-quality, lower-popularity titles that strongly match your profile "
+        "but are less likely to surface normally."
     ),
     "watchly.different": (
-        "Deliberately steps outside your two dominant genres while preserving secondary tastes, quality, and creator signals."
+        "Deliberately steps outside your two dominant genres while preserving secondary tastes, "
+        "quality, and creator signals."
     ),
     "watchly.newmonth": (
         "Movies and series released in the last 30 days, ranked by how well they match your taste profile."
