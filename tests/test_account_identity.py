@@ -645,3 +645,38 @@ def test_expired_nuvio_session_is_refreshed_and_returned(monkeypatch):
     assert response.refreshedNuvio.access_token == "n-new"
     assert response.refreshedNuvio.refresh_token == "n-refresh-new"
     assert response.refreshedNuvio.expires_at == 2_100_000_000
+
+
+
+def test_multiple_selected_sources_are_persisted(monkeypatch):
+    fake = setup_fakes(monkeypatch)
+    service = AuthService()
+    payload = TokenRequest(
+        trakt_access_token="t-abc",
+        nuvio_access_token="n-access",
+        nuvio_profile_id=2,
+        nuvio_profile_name="Nick",
+        watch_history_sources=["nuvio", "trakt"],
+    )
+
+    response, _, user_settings = asyncio.run(service.create_user_token(payload))
+
+    assert user_settings.watch_history_sources == ["trakt", "nuvio"]
+    stored = json.loads(fake.data[f"watchly:token:{response.token}"])
+    assert stored["settings"]["watch_history_sources"] == ["trakt", "nuvio"]
+    assert stored["settings"]["watch_history_source"] == "trakt"
+
+
+def test_every_selected_source_must_be_connected(monkeypatch):
+    setup_fakes(monkeypatch)
+    service = AuthService()
+    payload = TokenRequest(
+        trakt_access_token="t-abc",
+        watch_history_sources=["trakt", "nuvio"],
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_user_token(payload))
+
+    assert exc.value.status_code == 400
+    assert "Nuvio" in exc.value.detail
