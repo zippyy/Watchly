@@ -151,7 +151,7 @@ async def simkl_auth_redirect(request: Request):
             "response_type": "code",
             "client_id": settings.SIMKL_CLIENT_ID,
             "redirect_uri": redirect_uri,
-            "scope": "media:read",
+            "scope": "media:read media:write",
             "state": state,
             "code_challenge": _pkce_challenge(code_verifier),
             "code_challenge_method": "S256",
