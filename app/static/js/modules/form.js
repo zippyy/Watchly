@@ -817,8 +817,9 @@ function initializeNuvioSimklSync() {
         syncBtn.disabled = true;
         statusEl.textContent = enabled ? 'Disabling…' : 'Enabling and syncing…';
         try {
-            render(await request(enabled ? '/disable' : '/enable', 'POST'));
-            showToast(enabled ? 'Nuvio → Simkl sync enabled' : 'Nuvio → Simkl sync disabled', 'success');
+            const wasEnabled = enabled;
+            render(await request(wasEnabled ? '/disable' : '/enable', 'POST'));
+            showToast(wasEnabled ? 'Nuvio → Simkl sync disabled' : 'Nuvio → Simkl sync enabled', 'success');
         } catch (error) {
             statusEl.textContent = error.message;
             showToast(error.message, 'error');
