@@ -393,9 +393,7 @@ class AuthService:
         # Every selected source must belong to this linked account. The linked set
         # includes identities from earlier configurations because the configure
         # page submits masked provider tokens it cannot re-verify client-side.
-        missing_sources = [
-            provider for provider in payload.watch_history_sources if provider not in stored_identities
-        ]
+        missing_sources = [provider for provider in payload.watch_history_sources if provider not in stored_identities]
         if missing_sources:
             names = ", ".join(provider.capitalize() for provider in missing_sources)
             raise HTTPException(
