@@ -1,5 +1,5 @@
+from collections.abc import Iterable
 from datetime import datetime, timezone
-from typing import Iterable
 
 from app.models.history import WatchHistory, WatchHistoryItem
 
