@@ -1,11 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
-from app.services.nuvio_simkl_sync import (
-    is_enabled,
-    last_result,
-    set_enabled,
-    sync_nuvio_library_to_simkl,
-)
+from app.services.nuvio_simkl_sync import is_enabled, last_result, set_enabled, sync_nuvio_library_to_simkl
 from app.services.token_store import token_store
 
 router = APIRouter(tags=["Nuvio Simkl Sync"])
