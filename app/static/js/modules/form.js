@@ -52,6 +52,7 @@ export function initializeForm(domElements, state, actions) {
     initializeLlm();
     updateYearSlider = initializeYearSliderControl();
     initializeWatchHistorySource();
+    initializeNuvioSimklSync();
 }
 
 async function postJson(url, payload) {
@@ -756,4 +757,94 @@ function initializeWatchHistorySource() {
             setProviderConnected('nuvio', false);
         });
     }
+}
+
+
+function initializeNuvioSimklSync() {
+    const toggleBtn = document.getElementById('nuvioSimklSyncToggle');
+    const syncBtn = document.getElementById('nuvioSimklSyncNow');
+    const statusEl = document.getElementById('nuvioSimklSyncStatus');
+    const statsEl = document.getElementById('nuvioSimklSyncStats');
+    if (!toggleBtn || !syncBtn || !statusEl || !statsEl) return;
+
+    let enabled = false;
+
+    const accountToken = () => appState?.auth?.token || '';
+
+    const render = (data = {}) => {
+        enabled = !!data.enabled;
+        toggleBtn.textContent = enabled ? 'Disable' : 'Enable';
+        toggleBtn.classList.toggle('text-green-400', enabled);
+        const last = data.last_sync;
+        if (!last) {
+            statsEl.classList.add('hidden');
+            statusEl.textContent = enabled ? 'Automatic sync enabled · every 15 minutes' : 'Automatic sync disabled';
+            return;
+        }
+        statusEl.textContent = enabled ? 'Automatic sync enabled · every 15 minutes' : 'Automatic sync disabled';
+        const when = last.synced_at ? new Date(last.synced_at).toLocaleString() : 'Unknown';
+        statsEl.textContent = `Last sync: ${when} · Added: ${last.added ?? 0} · Skipped: ${last.skipped ?? 0} · Watched: ${last.watched ?? 0} · Unmatched: ${last.unmatched ?? 0} · Failed: ${last.failed ?? 0}`;
+        statsEl.classList.remove('hidden');
+    };
+
+    const request = async (path, method = 'GET') => {
+        const token = accountToken();
+        if (!token) throw new Error('Save or load this Watchly account first.');
+        const response = await fetch(`/${encodeURIComponent(token)}/sync/nuvio-simkl${path}`, { method });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || 'Nuvio → Simkl sync request failed');
+        return data;
+    };
+
+    const refresh = async () => {
+        if (!accountToken()) {
+            toggleBtn.disabled = true;
+            syncBtn.disabled = true;
+            statusEl.textContent = 'Save or load this Watchly account first.';
+            return;
+        }
+        toggleBtn.disabled = false;
+        syncBtn.disabled = false;
+        try {
+            render(await request(''));
+        } catch (error) {
+            statusEl.textContent = error.message;
+        }
+    };
+
+    toggleBtn.addEventListener('click', async () => {
+        toggleBtn.disabled = true;
+        syncBtn.disabled = true;
+        statusEl.textContent = enabled ? 'Disabling…' : 'Enabling and syncing…';
+        try {
+            render(await request(enabled ? '/disable' : '/enable', 'POST'));
+            showToast(enabled ? 'Nuvio → Simkl sync enabled' : 'Nuvio → Simkl sync disabled', 'success');
+        } catch (error) {
+            statusEl.textContent = error.message;
+            showToast(error.message, 'error');
+        } finally {
+            toggleBtn.disabled = false;
+            syncBtn.disabled = false;
+        }
+    });
+
+    syncBtn.addEventListener('click', async () => {
+        syncBtn.disabled = true;
+        statusEl.textContent = 'Syncing Nuvio library to Simkl…';
+        try {
+            const lastSync = await request('', 'POST');
+            render({ enabled, last_sync: lastSync });
+            showToast(`Simkl sync complete: ${lastSync.added ?? 0} added`, 'success');
+        } catch (error) {
+            statusEl.textContent = error.message;
+            showToast(error.message, 'error');
+        } finally {
+            syncBtn.disabled = false;
+        }
+    });
+
+    // Account identity is populated asynchronously. Refresh on initial load and
+    // again when the user reaches/clicks the configuration area.
+    setTimeout(refresh, 750);
+    document.getElementById('nav-config')?.addEventListener('click', refresh);
 }
