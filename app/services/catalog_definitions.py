@@ -204,15 +204,9 @@ class DynamicCatalogService:
                 True,
             )
         )
-        catalogs.extend(
-            get_catalogs_from_config(user_settings, "watchly.watchlist", "Watchlist Priority", True, True)
-        )
-        catalogs.extend(
-            get_catalogs_from_config(user_settings, "watchly.recent", "Recent Taste", True, True)
-        )
-        catalogs.extend(
-            get_catalogs_from_config(user_settings, "watchly.hidden", "Hidden Gems for You", True, True)
-        )
+        catalogs.extend(get_catalogs_from_config(user_settings, "watchly.watchlist", "Watchlist Priority", True, True))
+        catalogs.extend(get_catalogs_from_config(user_settings, "watchly.recent", "Recent Taste", True, True))
+        catalogs.extend(get_catalogs_from_config(user_settings, "watchly.hidden", "Hidden Gems for You", True, True))
         catalogs.extend(
             get_catalogs_from_config(user_settings, "watchly.different", "Try Something Different", True, True)
         )
