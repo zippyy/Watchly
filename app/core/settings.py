@@ -54,6 +54,37 @@ class PosterRatingConfig(BaseModel):
         return self
 
 
+WatchHistorySource = Literal["stremio", "trakt", "simkl", "nuvio"]
+WATCH_HISTORY_SOURCE_ORDER: tuple[WatchHistorySource, ...] = ("stremio", "trakt", "simkl", "nuvio")
+
+
+def normalize_watch_history_sources(
+    sources: list[WatchHistorySource] | tuple[WatchHistorySource, ...] | None,
+    legacy_source: WatchHistorySource | None = None,
+) -> list[WatchHistorySource]:
+    """Return unique, valid history sources in stable provider order.
+
+    Existing installs only have `watch_history_source`; the legacy value becomes
+    a one-element source list automatically.
+    """
+    requested = list(sources or [])
+    if not requested and legacy_source:
+        requested = [legacy_source]
+    if not requested:
+        requested = ["stremio"]
+
+    selected = set(requested)
+    return [source for source in WATCH_HISTORY_SOURCE_ORDER if source in selected]
+
+
+def watch_history_source_key(sources: list[WatchHistorySource] | tuple[WatchHistorySource, ...]) -> str:
+    """Stable cache/profile source key for one or more configured providers."""
+    normalized = normalize_watch_history_sources(list(sources))
+    if len(normalized) == 1:
+        return normalized[0]
+    return "merged:" + "+".join(normalized)
+
+
 LLM_PROVIDER_DEFAULT_MODELS = {
     "gemini": "gemini-2.5-flash",
     "openai": "gpt-5-mini",
@@ -128,9 +159,22 @@ class UserSettings(BaseModel):
     )
     nuvio_profile_id: int | None = Field(default=None, description="Nuvio profile index used for history")
     nuvio_profile_name: str | None = Field(default=None, description="Nuvio profile display name")
-    watch_history_source: Literal["stremio", "trakt", "simkl", "nuvio"] = Field(
-        default="stremio", description="Source for watch history used in profile building"
+    # Legacy single-source field kept for backwards compatibility with saved
+    # installs and older clients. New clients should use watch_history_sources.
+    watch_history_source: WatchHistorySource = Field(
+        default="stremio", description="Primary/legacy watch history source"
     )
+    watch_history_sources: list[WatchHistorySource] = Field(
+        default_factory=list,
+        description="One or more watch history sources merged before profile building",
+    )
+
+    @model_validator(mode="after")
+    def _normalize_watch_history_sources(self) -> "UserSettings":
+        normalized = normalize_watch_history_sources(self.watch_history_sources, self.watch_history_source)
+        self.watch_history_sources = normalized
+        self.watch_history_source = normalized[0]
+        return self
 
 
 # Catalog descriptions for frontend
