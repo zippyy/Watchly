@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.14.7 - 2026-09-21
+
+### Fixed
+
+- Updated `manifest.py` to import and call the renamed `fetch_library_for_sources` helper introduced by multi-source history support.
+- Manifest bootstrap caching now uses the full configured source list instead of the legacy single `watch_history_source` value.
+- Nuvio-only and arbitrary multi-source installs now generate recommendation catalog definitions even without a Stremio auth key.
+- Added regression coverage for merged bootstrap sources and Nuvio-only manifest generation.
+
 ## 1.14.6 - 2026-09-21
 
 ### Added

@@ -133,3 +133,35 @@ def test_dashboard_refresh_invalidates_the_manifest(fake_redis, count_builds):
     asyncio.run(user_cache.invalidate_all_user_data(TOKEN))
 
     assert asyncio.run(user_cache.get_manifest(TOKEN)) is None
+
+
+def test_nuvio_only_manifest_still_generates_catalogs(fake_redis, monkeypatch):
+    class FakeContext:
+        auth_key = None
+        library = LibraryCollection(source="nuvio")
+        user_settings = UserSettings(
+            catalogs=[],
+            watch_history_source="nuvio",
+            watch_history_sources=["nuvio"],
+            language="en-US",
+        )
+
+        async def close(self):
+            pass
+
+    async def fake_load(token, require_auth=False):
+        return FakeContext()
+
+    class FakeDynamicCatalogs:
+        def __init__(self, **kwargs):
+            pass
+
+        async def get_dynamic_catalogs(self, library, user_settings, token=None):
+            return [{"id": "watchly.rec", "name": "Top Picks for You", "type": "movie"}]
+
+    monkeypatch.setattr(manifest_module, "load_user_context", fake_load)
+    monkeypatch.setattr(manifest_module, "DynamicCatalogService", FakeDynamicCatalogs)
+
+    manifest = asyncio.run(manifest_service.get_manifest_for_token("tok_nuvio_only", force_rebuild=True))
+
+    assert manifest["catalogs"] == [{"id": "watchly.rec", "name": "Top Picks for You", "type": "movie"}]
