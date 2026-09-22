@@ -14,7 +14,7 @@ client = TestClient(app)
 def test_simkl_auth_redirect_uses_oauth2_pkce(monkeypatch):
     monkeypatch.setattr(settings, "SIMKL_CLIENT_ID", "client-id")
     monkeypatch.setattr(settings, "SIMKL_CLIENT_SECRET", "client-secret")
-    monkeypatch.setattr(settings, "HOST_NAME", "https://watchly.example")
+    monkeypatch.setattr(settings, "HOST_NAME", "https://watchly.example/")
     monkeypatch.setattr(settings, "APP_ENV", "production")
 
     response = client.get("/auth/simkl", follow_redirects=False)
@@ -39,7 +39,7 @@ def test_simkl_auth_redirect_uses_oauth2_pkce(monkeypatch):
 def test_simkl_callback_exchanges_with_pkce_and_returns_refresh_metadata(monkeypatch):
     monkeypatch.setattr(settings, "SIMKL_CLIENT_ID", "client-id")
     monkeypatch.setattr(settings, "SIMKL_CLIENT_SECRET", "client-secret")
-    monkeypatch.setattr(settings, "HOST_NAME", "https://watchly.example")
+    monkeypatch.setattr(settings, "HOST_NAME", "https://watchly.example/")
 
     captured = {}
 

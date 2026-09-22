@@ -60,6 +60,11 @@ def _verify_state(request: Request, provider: str, state: str | None) -> None:
         raise HTTPException(status_code=400, detail="Invalid or missing OAuth state. Please try connecting again.")
 
 
+def _callback_url(provider: str) -> str:
+    """Build an OAuth callback URL without allowing a trailing HOST_NAME slash to create //."""
+    return f"{settings.HOST_NAME.rstrip('/')}/auth/{provider}/callback"
+
+
 # ── Trakt OAuth ──────────────────────────────────────────────────────────────
 
 TRAKT_AUTH_URL = "https://trakt.tv/oauth/authorize"
@@ -71,7 +76,7 @@ async def trakt_auth_redirect(request: Request):
     if not settings.TRAKT_CLIENT_ID:
         raise HTTPException(status_code=501, detail="Trakt integration is not configured on this server.")
 
-    redirect_uri = f"{settings.HOST_NAME}/auth/trakt/callback"
+    redirect_uri = _callback_url("trakt")
     state = secrets.token_urlsafe(32)
     params = urlencode(
         {
@@ -94,7 +99,7 @@ async def trakt_callback(request: Request, code: str, state: str | None = None):
 
     _verify_state(request, "trakt", state)
 
-    redirect_uri = f"{settings.HOST_NAME}/auth/trakt/callback"
+    redirect_uri = _callback_url("trakt")
 
     try:
         token_data = await trakt_service.exchange_code(code, redirect_uri)
@@ -138,7 +143,7 @@ async def simkl_auth_redirect(request: Request):
     if not settings.SIMKL_CLIENT_ID or not settings.SIMKL_CLIENT_SECRET:
         raise HTTPException(status_code=501, detail="Simkl integration is not configured on this server.")
 
-    redirect_uri = f"{settings.HOST_NAME}/auth/simkl/callback"
+    redirect_uri = _callback_url("simkl")
     state = secrets.token_urlsafe(32)
     code_verifier = secrets.token_urlsafe(64)
     params = urlencode(
@@ -177,7 +182,7 @@ async def simkl_callback(
     if not code_verifier:
         raise HTTPException(status_code=400, detail="Missing Simkl PKCE verifier. Please try connecting again.")
 
-    redirect_uri = f"{settings.HOST_NAME}/auth/simkl/callback"
+    redirect_uri = _callback_url("simkl")
 
     try:
         token_data = await simkl_service.exchange_code(
