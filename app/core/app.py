@@ -1,3 +1,4 @@
+import asyncio
 import json
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -17,6 +18,7 @@ from app.core.logging import configure_logging, register_request_id_middleware
 from app.core.security import STORED_SECRET_SENTINEL
 from app.core.settings import get_current_year, get_default_catalogs_for_frontend, get_default_year_range
 from app.services.redis_service import redis_service
+from app.services.nuvio_simkl_sync import sync_worker
 from app.services.tmdb.genre import movie_genres, series_genres
 from app.services.token_store import token_store
 
@@ -42,7 +44,15 @@ async def lifespan(app: FastAPI):
             "Set the TOKEN_SALT environment variable to a strong, unique value before starting the app."
         )
 
-    yield
+    sync_task = asyncio.create_task(sync_worker(), name="nuvio-simkl-sync")
+    try:
+        yield
+    finally:
+        sync_task.cancel()
+        try:
+            await sync_task
+        except asyncio.CancelledError:
+            pass
     try:
         await redis_service.close()
         logger.info("Redis client closed")
