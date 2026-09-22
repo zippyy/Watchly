@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.14.8 - 2026-09-21
+
+### Fixed
+
+- Added the token-scoped Nuvio configure-page alias at `/{token}/nuvio/configure`.
+- Nuvio can now open Watchly's configure UI from the Nuvio-specific manifest base path instead of receiving a FastAPI `404 Not Found`.
+- Added regression coverage for the Nuvio configure route.
+
 ## 1.14.7 - 2026-09-21
 
 ### Fixed
