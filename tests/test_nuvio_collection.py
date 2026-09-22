@@ -38,7 +38,6 @@ def test_build_nuvio_collection_is_deterministic_and_combines_static_rows():
     assert all(source["addonId"] == "com.bimal.watchly" for source in top_picks["sources"])
 
 
-
 def test_new_static_catalogs_combine_movie_and_series_in_nuvio():
     collection = build_nuvio_collection(_manifest())
     folders = {folder["id"]: folder for folder in collection["folders"]}
