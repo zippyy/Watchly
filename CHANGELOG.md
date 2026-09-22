@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.14.5 - 2026-09-21
+
+### Fixed
+
+- OAuth callback URLs now normalize a trailing slash in `HOST_NAME`, preventing values such as `https://watchly.example/` from generating `https://watchly.example//auth/simkl/callback`.
+- Simkl and Trakt authorization/token-exchange callback URLs now use the same normalized public base URL.
+- Manifest URLs are normalized for the same trailing-slash case.
+- Added a Simkl AUTH V2 regression test that explicitly uses a trailing-slash `HOST_NAME` and verifies the exact registered callback URI is sent.
+
 ## 1.14.4 - 2026-09-21
 
 ### Fixed
