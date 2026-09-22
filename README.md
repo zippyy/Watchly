@@ -90,7 +90,7 @@ The regular `/{token}/manifest.json` and `/{token}/catalog/...` routes remain un
 
 ## Watch history sources
 
-Watchly works for users who keep their library in different places. Pick one source per install:
+Watchly works for users who keep their history in different places. Connect as many providers as you use, then select any combination to merge into one taste profile:
 
 - **Stremio** — uses your Stremio library directly (requires a Stremio email/password or auth key).
 - **Trakt** — connect via OAuth on the configure page; Watchly reads your watched history and ratings.
