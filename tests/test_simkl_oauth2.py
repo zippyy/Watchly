@@ -28,7 +28,7 @@ def test_simkl_auth_redirect_uses_oauth2_pkce(monkeypatch):
     assert query["client_id"] == ["client-id"]
     assert query["redirect_uri"] == ["https://watchly.example/auth/simkl/callback"]
     assert query["response_type"] == ["code"]
-    assert query["scope"] == ["media:read"]
+    assert query["scope"] == ["media:read media:write"]
     assert query["code_challenge_method"] == ["S256"]
     assert len(query["code_challenge"][0]) >= 43
 
