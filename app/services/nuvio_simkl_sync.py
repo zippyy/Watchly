@@ -108,8 +108,8 @@ async def sync_nuvio_library_to_simkl(token: str) -> SyncResult:
 
     # Simkl supports bulk sync writes; chunk to keep request bodies bounded.
     for start in range(0, max(len(movies), len(shows)), 100):
-        movie_chunk = movies[start:start + 100]
-        show_chunk = shows[start:start + 100]
+        movie_chunk = movies[start : start + 100]
+        show_chunk = shows[start : start + 100]
         if not movie_chunk and not show_chunk:
             continue
         response = await simkl_service.add_to_plan_to_watch(
