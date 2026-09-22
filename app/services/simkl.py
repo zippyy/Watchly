@@ -195,6 +195,30 @@ class SimklService:
             logger.warning(f"Simkl item details {simkl_id} request failed: {e}")
             return {}
 
+    async def add_to_plan_to_watch(
+        self,
+        access_token: str,
+        client_id: str,
+        *,
+        movies: list[str] | None = None,
+        shows: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Add IMDb IDs to Simkl Plan to Watch without touching watch history."""
+        payload: dict[str, Any] = {}
+        if movies:
+            payload["movies"] = [{"to": "plantowatch", "ids": {"imdb": imdb_id}} for imdb_id in movies]
+        if shows:
+            payload["shows"] = [{"to": "plantowatch", "ids": {"imdb": imdb_id}} for imdb_id in shows]
+        if not payload:
+            return {"added": {}, "not_found": {}}
+        result = await self.client.post(
+            "/sync/add-to-list",
+            json=payload,
+            params=self._api_params(client_id),
+            headers=self._headers(access_token),
+        )
+        return result if isinstance(result, dict) else {}
+
     async def get_history(self, access_token: str, client_id: str) -> WatchHistory:
         """Fetch watch history from Simkl using OAuth access token."""
         headers = self._headers(access_token)
