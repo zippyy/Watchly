@@ -169,9 +169,7 @@ class CatalogService:
             cached_data = await user_cache.get_profile_and_watched_sets(ctx.token, content_type)
 
             requested_source = (
-                watch_history_source_key(ctx.user_settings.watch_history_sources)
-                if ctx.user_settings
-                else "stremio"
+                watch_history_source_key(ctx.user_settings.watch_history_sources) if ctx.user_settings else "stremio"
             )
             cached_source = getattr(cached_data[0], "source", "stremio") if cached_data and cached_data[0] else None
             if cached_data and cached_source is not None and cached_source != requested_source:
