@@ -197,7 +197,7 @@ class AuthService:
         token to persist against this early, and `_build_user_settings` reads
         them straight off the payload a few steps later.
         """
-        redirect_uri = f"{settings.HOST_NAME}/auth/trakt/callback"
+        redirect_uri = f"{settings.HOST_NAME.rstrip('/')}/auth/trakt/callback"
         try:
             data = await trakt_service.refresh_token(payload.trakt_refresh_token, redirect_uri)
         except Exception as e:
@@ -443,7 +443,7 @@ class AuthService:
                 logger.warning(f"[{redact_token(token)}] Failed to invalidate caches on source change: {e}")
 
         # 5. Build response
-        base_url = settings.HOST_NAME
+        base_url = settings.HOST_NAME.rstrip("/")
         manifest_url = f"{base_url}/{token}/manifest.json"
         expires_in = settings.TOKEN_TTL_SECONDS if settings.TOKEN_TTL_SECONDS > 0 else None
 
