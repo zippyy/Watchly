@@ -27,6 +27,17 @@ def test_configure_page_bootstraps_current_year_and_year_defaults(monkeypatch):
     assert 'id="yearMax" min="1970"' in html
 
 
+def test_configure_page_exposes_multi_source_history_selector():
+    response = client.get("/configure")
+
+    assert response.status_code == 200
+    html = response.text
+    assert "Watch History Sources" in html
+    assert 'id="watchHistorySources"' in html
+    for source in ("stremio", "trakt", "simkl", "nuvio"):
+        assert f'data-source-btn="{source}"' in html
+
+
 def test_configure_page_includes_nuvio_history_provider():
     response = client.get("/configure")
 
