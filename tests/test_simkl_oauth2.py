@@ -162,3 +162,37 @@ def test_simkl_refresh_token_is_masked_as_secret():
 
     assert masked["simkl_access_token"] == STORED_SECRET_SENTINEL
     assert masked["simkl_refresh_token"] == STORED_SECRET_SENTINEL
+
+
+def test_simkl_add_to_list_uses_api_key_header_and_valid_payload():
+    service = SimklService()
+    captured = {}
+
+    async def fake_post(path, json=None, **kwargs):
+        captured["path"] = path
+        captured["json"] = json
+        captured["kwargs"] = kwargs
+        return {"added": {"movies": 1, "shows": 1}, "not_found": {}}
+
+    service.client.post = fake_post
+
+    result = asyncio.run(
+        service.add_to_plan_to_watch(
+            "simkl-access-token",
+            "simkl-client-id",
+            movies=["tt0816692"],
+            shows=["tt2861424"],
+        )
+    )
+
+    assert captured["path"] == "/sync/add-to-list"
+    assert captured["json"] == {
+        "movies": [{"to": "plantowatch", "ids": {"imdb": "tt0816692"}}],
+        "shows": [{"to": "plantowatch", "ids": {"imdb": "tt2861424"}}],
+    }
+    assert captured["kwargs"]["headers"]["Authorization"] == "Bearer simkl-access-token"
+    assert captured["kwargs"]["headers"]["simkl-api-key"] == "simkl-client-id"
+    assert captured["kwargs"]["params"]["client_id"] == "simkl-client-id"
+    assert result["added"] == {"movies": 1, "shows": 1}
+
+    asyncio.run(service.close())

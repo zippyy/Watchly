@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.14.12 - 2026-09-22
+
+### Fixed
+
+- Simkl `/sync/add-to-list` writes now send the registered client ID in the required `simkl-api-key` request header in addition to the existing OAuth bearer token.
+- Added regression coverage for the exact Nuvio → Simkl Plan to Watch payload and write-auth headers.
+- Confirmed the AUTH V2 flow requests `media:read media:write`; existing Simkl connections authorized before write scope was requested must reconnect once to receive a write-capable token.
+
 ## 1.14.9 - 2026-09-21
 
 ### Added

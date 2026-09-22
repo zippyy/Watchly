@@ -82,10 +82,12 @@ class SimklService:
         return params
 
     @staticmethod
-    def _headers(access_token: str | None = None) -> dict[str, str]:
+    def _headers(access_token: str | None = None, client_id: str | None = None) -> dict[str, str]:
         headers = {"User-Agent": f"Watchly/{__version__}"}
         if access_token:
             headers["Authorization"] = f"Bearer {access_token}"
+        if client_id:
+            headers["simkl-api-key"] = client_id
         return headers
 
     async def exchange_code(
@@ -215,7 +217,7 @@ class SimklService:
             "/sync/add-to-list",
             json=payload,
             params=self._api_params(client_id),
-            headers=self._headers(access_token),
+            headers=self._headers(access_token, client_id),
         )
         return result if isinstance(result, dict) else {}
 
