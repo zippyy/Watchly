@@ -647,7 +647,6 @@ def test_expired_nuvio_session_is_refreshed_and_returned(monkeypatch):
     assert response.refreshedNuvio.expires_at == 2_100_000_000
 
 
-
 def test_multiple_selected_sources_are_persisted(monkeypatch):
     fake = setup_fakes(monkeypatch)
     service = AuthService()
