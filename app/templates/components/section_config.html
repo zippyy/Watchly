@@ -355,14 +355,14 @@
     </div>
     <div class="border-t border-white/10"></div>
 
-    <!-- Watch History Source -->
+    <!-- Watch History Sources -->
     <div class="space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-                <label class="block text-sm font-medium text-slate-400 uppercase tracking-wider">Watch History Source</label>
-                <p class="text-xs text-slate-500 mt-1">Where Watchly should read your history from. Connect Trakt, Simkl, or Nuvio in <button type="button" class="account-link text-slate-300 hover:text-white underline">Accounts</button> to use them.</p>
+                <label class="block text-sm font-medium text-slate-400 uppercase tracking-wider">Watch History Sources</label>
+                <p class="text-xs text-slate-500 mt-1">Select one or more connected sources. Watchly merges them by IMDb ID, keeping the strongest rating, rewatch, completion, and most-recent watch signals. Connect providers in <button type="button" class="account-link text-slate-300 hover:text-white underline">Accounts</button>.</p>
             </div>
-            <div class="inline-flex flex-wrap items-center bg-neutral-900/60 border border-white/10 rounded-xl p-1 backdrop-blur-sm self-start sm:self-auto" role="group" aria-label="Watch history source">
+            <div class="inline-flex flex-wrap items-center bg-neutral-900/60 border border-white/10 rounded-xl p-1 backdrop-blur-sm self-start sm:self-auto" role="group" aria-label="Watch history sources">
                 <button type="button"
                     class="source-btn px-4 py-2 text-sm font-medium rounded-lg transition-all outline-none focus:outline-none bg-white/10 text-white border border-white/20 shadow-sm flex items-center gap-1.5"
                     data-source-btn="stremio">Stremio</button>
@@ -386,6 +386,7 @@
                 </button>
             </div>
         </div>
+        <input type="hidden" id="watchHistorySources" value="stremio">
         <input type="hidden" id="watchHistorySource" value="stremio">
     </div>
     <div class="border-t border-white/10"></div>

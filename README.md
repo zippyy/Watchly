@@ -36,7 +36,7 @@ For Stremio, Watchly behaves like a normal catalog addon. For **Nuvio**, this fo
 ## Features
 
 - **Personalized recommendations** — a taste profile (top genres, keywords, directors, cast, eras, countries, runtime) is built from your history and drives every catalog row.
-- **Four history sources** — use your **Stremio** library, **Trakt**, **Simkl**, or a specific **Nuvio** profile. Trakt/Simkl contribute ratings; Nuvio contributes synced watched state, completion, and recency.
+- **Merge multiple history sources** — select any combination of **Stremio**, **Trakt**, **Simkl**, and a specific **Nuvio** profile. Watchly deduplicates by IMDb ID and keeps the strongest rating, rewatch, completion, and recency signals from each provider.
 - **Multiple catalog types** — Top Picks, "Because you watched/loved", dynamic genre & keyword rows, recommendations from your recurring directors and actors, and "based on everything you loved/liked".
 - **Native Nuvio Collection Mode** — installing through the Watchly configure page creates/updates a single native **For You** Collection in Nuvio while keeping Watchly's backing catalogs out of normal Home/Catalog Order rows.
 - **Fine-grained personalization** — discovery style (mainstream → hidden gems), release-year window, excluded genres (separately for movies and series), display language, and per-catalog enable/rename/shuffle controls.
@@ -48,12 +48,12 @@ For Stremio, Watchly behaves like a normal catalog addon. For **Nuvio**, this fo
 
 ## How it works
 
-1. You open the `/configure` page and connect a history source (Stremio, Trakt/Simkl via OAuth, or Nuvio via direct browser-to-Nuvio sign-in). Stored credentials/session tokens are encrypted in Redis under a short opaque **token**. That token is embedded in your personal manifest URL.
-2. Watchly fetches your watch history from the configured source and converts it into a source-agnostic library — ratings ≥ 9 count as *loved*, 7–8.9 as *liked*, the rest as *watched*.
+1. You open the `/configure` page and connect one or more history sources (Stremio, Trakt/Simkl via OAuth, and/or Nuvio via direct browser-to-Nuvio sign-in). Stored credentials/session tokens are encrypted in Redis under a short opaque **token**. That token is embedded in your personal manifest URL.
+2. Watchly fetches every selected history, deduplicates titles by IMDb ID, and merges the strongest signals: highest explicit rating, highest real watch count, highest completion, and newest watch timestamp. It then converts that merged history into a source-agnostic library — ratings ≥ 9 count as *loved*, 7–8.9 as *liked*, rewatches can act as a love signal, and unwatched Stremio library items stay in the *added* bucket.
 3. From that library it builds a **taste profile**: a numerical fingerprint of your preferences across genres, keywords, people, eras, countries, and runtime.
 4. When Stremio or Nuvio requests a Watchly catalog, Watchly routes the request to the matching recommendation engine, pulls candidates from TMDB (and Simkl where available), scores them against your profile, caps them for diversity, enriches them with metadata and (optionally) poster ratings, translates titles to your language, and returns standard Stremio-compatible catalog data. Nuvio Collection Mode uses those same catalog endpoints as native Collection sources.
 
-Each user's state is keyed entirely on their token. You can switch history sources at any time; the library and profile are rebuilt from the new source.
+Each user's state is keyed entirely on their token. You can add, remove, or combine history sources at any time; changing the selected source set invalidates the derived library/profile caches and rebuilds them from the new combination.
 
 ## Catalogs
 
@@ -90,16 +90,16 @@ The regular `/{token}/manifest.json` and `/{token}/catalog/...` routes remain un
 
 ## Watch history sources
 
-Watchly works for users who keep their library in different places. Pick one source per install:
+Watchly works for users who keep their history in different places. Connect as many providers as you use, then select any combination to merge into one taste profile:
 
 - **Stremio** — uses your Stremio library directly (requires a Stremio email/password or auth key).
 - **Trakt** — connect via OAuth on the configure page; Watchly reads your watched history and ratings.
 - **Simkl** — connect via OAuth on the configure page; Watchly reads your watched history and ratings.
 - **Nuvio** — sign in directly to Nuvio from the configure page and choose a profile. Watchly reads the completed watched items and playback progress Nuvio Sync has stored for that profile. Nuvio does not expose an equivalent explicit rating signal here, so Watchly uses completion and recency rather than ratings.
 
-> If that Nuvio profile is configured to use an external tracking provider such as Trakt/Simkl, Nuvio may skip writing some watched/progress events to its own Supabase sync store. In that setup, selecting the corresponding Trakt or Simkl account directly in Watchly gives the most complete history.
+> If that Nuvio profile is configured to use an external tracking provider such as Trakt/Simkl, Nuvio may skip writing some watched/progress events to its own Supabase sync store. Connecting that same Trakt/Simkl account to Watchly and selecting both sources fills those gaps automatically.
 
-A single install uses exactly one source at a time. Switching sources rebuilds your library and profile from the new account.
+When the same IMDb title exists in multiple selected sources, Watchly does **not** add watch counts together (which would create fake rewatches). It uses the maximum watch count/completion, the highest explicit rating, and the newest watch timestamp.
 
 ## Personalization
 
@@ -176,7 +176,7 @@ Docker is the recommended way to self-host. Watchly requires a **Redis** instanc
    ```
 
 4. **Configure and install:**
-   Open `http://localhost:8000/configure` (or your `HOST_NAME`), connect a history source, and pick your catalogs.
+   Open `http://localhost:8000/configure` (or your `HOST_NAME`), connect one or more history sources, select the sources you want merged, and pick your catalogs.
    - **Nuvio:** click **Install on Nuvio** to install/update the native **For You** Collection.
    - **Stremio:** use the generated standard manifest URL as usual.
 

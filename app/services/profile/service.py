@@ -2,7 +2,7 @@ from typing import Any
 
 from loguru import logger
 
-from app.core.settings import UserSettings
+from app.core.settings import UserSettings, watch_history_source_key
 from app.models.history import WatchHistory
 from app.models.library import LibraryCollection
 from app.models.profile import TasteProfile
@@ -198,6 +198,44 @@ class ProfileService:
             profile.source = source
         return profile
 
+    async def _build_profile_from_collection_incremental(
+        self,
+        library: LibraryCollection,
+        content_type: str,
+        token: str,
+        source: str,
+    ) -> tuple[TasteProfile | None, set[int], set[str]]:
+        """Build/reuse a profile from an already-resolved external or merged library."""
+        typed = library.for_type(content_type)
+        watched_imdb = library.all_imdb_ids()
+        existing_profile = await user_cache.get_profile(token, content_type)
+        plan, new_ids = await self._plan_build(token, content_type, typed, existing_profile)
+
+        if plan == "reuse":
+            cached = await user_cache.get_profile_and_watched_sets(token, content_type)
+            if cached:
+                logger.debug(f"[{token[:8]}...] {source} library unchanged; reusing cached {content_type} profile")
+                return cached
+
+        elif plan == "incremental":
+            new_items = self._items_with_ids(typed, new_ids).all_items()
+            scored = [self.scoring_service.process_item(item) for item in new_items]
+            if scored:
+                logger.debug(
+                    f"[{token[:8]}...] {len(scored)} new {source} items, updating {content_type} incrementally"
+                )
+                profile = await self.builder.update_profile_incrementally(
+                    existing_profile, scored, content_type=content_type
+                )
+                if profile is not None:
+                    profile.source = source
+                await user_cache.set_library_buckets(token, content_type, typed)
+                return profile, set(), watched_imdb
+
+        profile = await self._build_from_collection(library, content_type, source)
+        await user_cache.set_library_buckets(token, content_type, typed)
+        return profile, set(), watched_imdb
+
     async def build_and_cache_profile(
         self,
         token: str,
@@ -209,34 +247,38 @@ class ProfileService:
     ) -> tuple[TasteProfile | None, set[int], set[str]]:
         """Build profile data and cache the profile and watched sets.
 
-        Dispatches on user_settings.watch_history_source: uses Trakt, Simkl, or Nuvio
-        when the user connected those, otherwise the Stremio library.
+        The context layer has already resolved and merged every configured
+        watch-history source into `library_items`. Pure Stremio installs keep the
+        original sampled/incremental path; external or merged libraries score all
+        available signals so provider ratings and rewatches are preserved.
         """
-        source = user_settings.watch_history_source if user_settings else "stremio"
+        sources = user_settings.watch_history_sources if user_settings else ["stremio"]
+        requested_source = watch_history_source_key(sources)
+        effective_source = getattr(library_items, "source", "stremio")
 
-        # Drop a cached profile that was built from a different source than the
-        # one the user has currently selected — otherwise switching sources in
-        # the configure page silently keeps serving the old (wrong) profile.
         cached = await user_cache.get_profile(token, content_type)
-        if cached and getattr(cached, "source", "stremio") != source:
+        if cached and getattr(cached, "source", "stremio") != requested_source:
             logger.info(
                 f"[{token[:8]}...] Cached profile source '{cached.source}' "
-                f"!= requested '{source}'; invalidating before rebuild."
+                f"!= requested '{requested_source}'; invalidating before rebuild."
             )
             await user_cache.invalidate_profile(token, content_type)
             await user_cache.invalidate_watched_sets(token, content_type)
 
-        if source in ("trakt", "simkl", "nuvio"):
-            profile, watched_tmdb, watched_imdb = await self._build_from_external_source(
-                source, user_settings, content_type, library_items, token=token
-            )
-        else:
+        if sources == ["stremio"] and effective_source == "stremio":
             profile, watched_tmdb, watched_imdb = await self.build_profile_incremental(
                 library_items,
                 content_type,
                 token,
                 stremio_service,
                 auth_key,
+            )
+        else:
+            profile, watched_tmdb, watched_imdb = await self._build_profile_from_collection_incremental(
+                library_items,
+                content_type,
+                token,
+                effective_source,
             )
 
         await user_cache.set_profile_and_watched_sets(token, content_type, profile, watched_tmdb, watched_imdb)

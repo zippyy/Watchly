@@ -1,8 +1,16 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from app.core.settings import DEFAULT_YEAR_MIN, CatalogConfig, LLMConfig, PosterRatingConfig, get_default_year_max
+from app.core.settings import (
+    DEFAULT_YEAR_MIN,
+    CatalogConfig,
+    LLMConfig,
+    PosterRatingConfig,
+    WatchHistorySource,
+    get_default_year_max,
+    normalize_watch_history_sources,
+)
 
 
 class TokenRequest(BaseModel):
@@ -43,9 +51,19 @@ class TokenRequest(BaseModel):
     )
     nuvio_profile_id: int | None = Field(default=None, description="Nuvio profile index used for history")
     nuvio_profile_name: str | None = Field(default=None, description="Nuvio profile display name")
-    watch_history_source: Literal["stremio", "trakt", "simkl", "nuvio"] = Field(
-        default="stremio", description="Source for watch history"
+    watch_history_source: WatchHistorySource = Field(
+        default="stremio", description="Primary/legacy watch history source"
     )
+    watch_history_sources: list[WatchHistorySource] = Field(
+        default_factory=list, description="One or more watch history sources to merge"
+    )
+
+    @model_validator(mode="after")
+    def _normalize_watch_history_sources(self) -> "TokenRequest":
+        normalized = normalize_watch_history_sources(self.watch_history_sources, self.watch_history_source)
+        self.watch_history_sources = normalized
+        self.watch_history_source = normalized[0]
+        return self
 
 
 class TraktTokens(BaseModel):
