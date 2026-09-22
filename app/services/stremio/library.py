@@ -112,7 +112,8 @@ def watch_history_to_library_collection(history: WatchHistory) -> LibraryCollect
     Bucketing rules:
       loved:   rating >= 9, OR no rating + watch_count >= 2 (rewatch as love proxy)
       liked:   7 <= rating < 9
-      watched: everything else with any completion/watch signal
+      watched: anything else with a completion/watch signal
+      added:   no completion/watch signal (important when Stremio is one merged source)
 
     Items without IMDb IDs are skipped — downstream code keys on `tt…` / `tmdb:…`
     everywhere and dropping them up front avoids fanning empty IDs into TMDB lookups.
@@ -120,6 +121,7 @@ def watch_history_to_library_collection(history: WatchHistory) -> LibraryCollect
     loved: list[StremioLibraryItem] = []
     liked: list[StremioLibraryItem] = []
     watched: list[StremioLibraryItem] = []
+    added: list[StremioLibraryItem] = []
     seen: set[str] = set()
 
     for item in history.items:
@@ -134,8 +136,10 @@ def watch_history_to_library_collection(history: WatchHistory) -> LibraryCollect
             bucket = "liked"
         elif rating is None and item.watch_count >= 2:
             bucket = "loved"
-        else:
+        elif item.watch_count > 0 or item.completion > 0:
             bucket = "watched"
+        else:
+            bucket = "added"
 
         is_loved = bucket == "loved"
         is_liked = bucket == "liked"
@@ -145,14 +149,16 @@ def watch_history_to_library_collection(history: WatchHistory) -> LibraryCollect
             loved.append(lib_item)
         elif bucket == "liked":
             liked.append(lib_item)
-        else:
+        elif bucket == "watched":
             watched.append(lib_item)
+        else:
+            added.append(lib_item)
 
     return LibraryCollection(
         loved=loved,
         liked=liked,
         watched=watched,
-        added=[],
+        added=added,
         removed=[],
         source=history.source or "stremio",
     )
