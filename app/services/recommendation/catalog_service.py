@@ -9,7 +9,7 @@ from loguru import logger
 from app.core.config import settings
 from app.core.constants import DEFAULT_CATALOG_LIMIT
 from app.core.security import redact_token
-from app.core.settings import UserSettings, resolve_tmdb_api_key
+from app.core.settings import UserSettings, resolve_tmdb_api_key, watch_history_source_key
 from app.models.library import LibraryCollection
 from app.models.profile import TasteProfile
 from app.services.catalog_updater import catalog_updater
@@ -168,7 +168,11 @@ class CatalogService:
             # Load profile (cached or build fresh)
             cached_data = await user_cache.get_profile_and_watched_sets(ctx.token, content_type)
 
-            requested_source = ctx.user_settings.watch_history_source if ctx.user_settings else "stremio"
+            requested_source = (
+                watch_history_source_key(ctx.user_settings.watch_history_sources)
+                if ctx.user_settings
+                else "stremio"
+            )
             cached_source = getattr(cached_data[0], "source", "stremio") if cached_data and cached_data[0] else None
             if cached_data and cached_source is not None and cached_source != requested_source:
                 logger.info(
@@ -181,9 +185,9 @@ class CatalogService:
                 profile, watched_tmdb, watched_imdb = cached_data
                 logger.debug(f"[{redact_token(ctx.token)}] Using cached profile for {content_type}")
             else:
-                source = ctx.user_settings.watch_history_source if ctx.user_settings else "stremio"
+                sources = ctx.user_settings.watch_history_sources if ctx.user_settings else ["stremio"]
                 logger.info(
-                    f"[{redact_token(ctx.token)}] Profile not cached for {content_type}, building from {source}"
+                    f"[{redact_token(ctx.token)}] Profile not cached for {content_type}, building from {sources}"
                 )
                 profile, watched_tmdb, watched_imdb = await profile_service.build_and_cache_profile(
                     ctx.token,
