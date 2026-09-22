@@ -21,7 +21,7 @@ class WatchHistory(BaseModel):
     """Collection of watch history items from a single source."""
 
     items: list[WatchHistoryItem] = Field(default_factory=list)
-    source: Literal["stremio", "trakt", "simkl", "nuvio"] = "stremio"
+    source: Literal["stremio", "trakt", "simkl", "nuvio", "merged"] = "stremio"
 
     def imdb_ids(self) -> set[str]:
         return {i.imdb_id for i in self.items}
