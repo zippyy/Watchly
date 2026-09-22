@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.14.6 - 2026-09-21
+
+### Added
+
+- Watch history sources are now **multi-select**. A single Watchly install can combine any connected mix of Stremio, Trakt, Simkl, and Nuvio.
+- Added title-level history merging keyed by IMDb ID. Duplicate provider records keep the highest explicit rating, maximum real watch count, maximum completion, and newest watch timestamp.
+- Existing installs with only the legacy `watch_history_source` setting migrate automatically to a one-element `watch_history_sources` list.
+
+### Changed
+
+- Connecting a Trakt, Simkl, or Nuvio history account opts it into the merged source set by default; each source can then be toggled independently on Configure.
+- Duplicate watches are **not summed across providers**, preventing the same synchronized watch from becoming a fake rewatch/love signal.
+- Stremio added-but-unwatched items remain in the added bucket when Stremio is merged with external histories.
+- Source-set changes invalidate library/profile/catalog caches so recommendations rebuild from the new combination.
+- Multi-source fetches degrade per provider: one temporarily unavailable source no longer discards successful history from the others.
+
 ## 1.14.5 - 2026-09-21
 
 ### Fixed
