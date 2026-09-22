@@ -67,6 +67,11 @@ You choose which of these to enable on the configure page. Each can be toggled p
 | **From your favourite Creators** | `watchly.creators` | Recommendations from directors and lead actors who recur across multiple items in your library — not one-offs. |
 | **Based on what you loved** | `watchly.all.loved` | Recommendations drawn from your entire set of loved items. |
 | **Based on what you liked** | `watchly.liked.all` | Recommendations drawn from your entire set of liked items. |
+| **Watchlist Priority** | `watchly.watchlist` | Ranks saved-but-unwatched titles by Watchly taste fit. |
+| **Recent Taste** | `watchly.recent` | Builds a short-term profile from roughly the last 60 days and recommends from what you are into lately. |
+| **Hidden Gems for You** | `watchly.hidden` | Quality-filtered, lower-popularity titles ranked against your profile. |
+| **Try Something Different** | `watchly.different` | Avoids your two dominant genres while preserving secondary tastes and quality signals. |
+| **New This Month for You** | `watchly.newmonth` | Titles released in the last 30 days, ranked against your profile. |
 
 ## Nuvio Collection Mode
 
@@ -80,7 +85,7 @@ When you click **Install on Nuvio** from the Watchly configure page, Watchly:
 4. Pulls the profile's existing Collections, adds or replaces only the deterministic `watchly-for-you` Collection, and syncs the merged Collection list back to Nuvio.
 5. Reuses Watchly's normal recommendation engines through `/{token}/nuvio/catalog/...` aliases, so recommendation generation stays identical to the standard Stremio addon.
 
-The resulting Collection is titled **For You** and is built from the recommendation catalogs you enabled in Watchly. Stable movie/series rows such as **Top Picks for You** are combined into one folder with Movie and Series tabs, while dynamic rows such as **Because you watched/loved** and generated themes remain separate when their names or seed data differ.
+The resulting Collection is titled **For You** and is built from the recommendation catalogs you enabled in Watchly. Static rows such as **Watchlist Priority**, **Recent Taste**, **Hidden Gems for You**, **Try Something Different**, and **New This Month for You** are combined into one Nuvio folder with Movie and Series sources when both are enabled. Stable movie/series rows such as **Top Picks for You** are combined into one folder with Movie and Series tabs, while dynamic rows such as **Because you watched/loved** and generated themes remain separate when their names or seed data differ.
 
 Re-running **Install on Nuvio** is safe: the existing `watchly-for-you` Collection is updated instead of duplicated, and unrelated Nuvio Collections are preserved. Existing standard Watchly installs on that Nuvio profile are upgraded in place to Collection Mode.
 

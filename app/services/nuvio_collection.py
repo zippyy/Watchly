@@ -38,6 +38,11 @@ _COMBINED_CATALOG_IDS = {
     "watchly.creators",
     "watchly.all.loved",
     "watchly.liked.all",
+    "watchly.watchlist",
+    "watchly.recent",
+    "watchly.hidden",
+    "watchly.different",
+    "watchly.newmonth",
 }
 
 _EMOJI_BY_PREFIX = (
@@ -47,6 +52,11 @@ _EMOJI_BY_PREFIX = (
     ("watchly.liked.all", "👍"),
     ("watchly.creators", "🎬"),
     ("watchly.theme", "✨"),
+    ("watchly.watchlist", "📌"),
+    ("watchly.recent", "🕒"),
+    ("watchly.hidden", "💎"),
+    ("watchly.different", "🧭"),
+    ("watchly.newmonth", "🆕"),
 )
 
 

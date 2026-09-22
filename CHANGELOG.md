@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.14.9 - 2026-09-21
+
+### Added
+
+- **Watchlist Priority** (`watchly.watchlist`): ranks saved-but-unwatched titles by Watchly taste fit.
+- **Recent Taste** (`watchly.recent`): builds a short-term profile from roughly the last 60 days of viewing and recommends against that profile.
+- **Hidden Gems for You** (`watchly.hidden`): surfaces strong taste matches from lower-popularity, quality-filtered titles.
+- **Try Something Different** (`watchly.different`): deliberately excludes the user's two dominant genres while preserving secondary taste and quality signals.
+- **New This Month for You** (`watchly.newmonth`): ranks releases from the last 30 days against the user's taste profile.
+- All five catalogs are independently configurable for Movies/Series and integrate into Nuvio's native **For You** Collection.
+
+### Fixed
+
+- Catalog profile-cache source validation now uses the merged multi-source key instead of the legacy single `watch_history_source` value.
+
 ## 1.14.8 - 2026-09-21
 
 ### Fixed

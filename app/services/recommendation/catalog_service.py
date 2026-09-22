@@ -9,7 +9,7 @@ from loguru import logger
 from app.core.config import settings
 from app.core.constants import DEFAULT_CATALOG_LIMIT
 from app.core.security import redact_token
-from app.core.settings import UserSettings, resolve_tmdb_api_key
+from app.core.settings import UserSettings, resolve_tmdb_api_key, watch_history_source_key
 from app.models.library import LibraryCollection
 from app.models.profile import TasteProfile
 from app.services.catalog_updater import catalog_updater
@@ -19,6 +19,7 @@ from app.services.recommendation.all_based import AllBasedService
 from app.services.recommendation.catalog_utils import clean_meta, shuffle_data_if_needed
 from app.services.recommendation.creators import CreatorsService
 from app.services.recommendation.item_based import ItemBasedService
+from app.services.recommendation.personalized_catalogs import PersonalizedCatalogService
 from app.services.recommendation.theme_based import ThemeBasedService
 from app.services.recommendation.top_picks import TopPicksService
 from app.services.redis_service import redis_service
@@ -167,7 +168,9 @@ class CatalogService:
             # Load profile (cached or build fresh)
             cached_data = await user_cache.get_profile_and_watched_sets(ctx.token, content_type)
 
-            requested_source = ctx.user_settings.watch_history_source if ctx.user_settings else "stremio"
+            requested_source = (
+                watch_history_source_key(ctx.user_settings.watch_history_sources) if ctx.user_settings else "stremio"
+            )
             cached_source = getattr(cached_data[0], "source", "stremio") if cached_data and cached_data[0] else None
             if cached_data and cached_source is not None and cached_source != requested_source:
                 logger.info(
@@ -180,9 +183,9 @@ class CatalogService:
                 profile, watched_tmdb, watched_imdb = cached_data
                 logger.debug(f"[{redact_token(ctx.token)}] Using cached profile for {content_type}")
             else:
-                source = ctx.user_settings.watch_history_source if ctx.user_settings else "stremio"
+                sources = ctx.user_settings.watch_history_sources if ctx.user_settings else ["stremio"]
                 logger.info(
-                    f"[{redact_token(ctx.token)}] Profile not cached for {content_type}, building from {source}"
+                    f"[{redact_token(ctx.token)}] Profile not cached for {content_type}, building from {sources}"
                 )
                 profile, watched_tmdb, watched_imdb = await profile_service.build_and_cache_profile(
                     ctx.token,
@@ -240,6 +243,11 @@ class CatalogService:
             "watchly.creators",
             "watchly.all.loved",
             "watchly.liked.all",
+            "watchly.watchlist",
+            "watchly.recent",
+            "watchly.hidden",
+            "watchly.different",
+            "watchly.newmonth",
         ]
         # watchly.loved.* / watchly.watched.* kept for legacy stored manifests
         # — installed Stremio clients may still request these IDs after the
@@ -257,7 +265,8 @@ class CatalogService:
                 detail=(
                     "Invalid id. Supported: 'watchly.rec', 'watchly.creators', "
                     "'watchly.theme.<params>', 'watchly.item.<imdb>', "
-                    "'watchly.all.loved', 'watchly.liked.all'"
+                    "'watchly.all.loved', 'watchly.liked.all', 'watchly.watchlist', "
+                    "'watchly.recent', 'watchly.hidden', 'watchly.different', 'watchly.newmonth'"
                 ),
             )
 
@@ -273,6 +282,7 @@ class CatalogService:
             "top_picks": TopPicksService(tmdb_service, user_settings),
             "creators": CreatorsService(tmdb_service, user_settings),
             "all_based": AllBasedService(tmdb_service, user_settings),
+            "personalized": PersonalizedCatalogService(tmdb_service, user_settings),
         }
 
     async def _get_trending_fallback(
@@ -409,6 +419,57 @@ class CatalogService:
                 profile=profile,
             )
             logger.info(f"Found {len(recommendations)} recommendations based on all {item_type} items")
+
+        elif catalog_id in {
+            "watchly.watchlist",
+            "watchly.recent",
+            "watchly.hidden",
+            "watchly.different",
+            "watchly.newmonth",
+        }:
+            personalized: PersonalizedCatalogService = services["personalized"]
+
+            if catalog_id == "watchly.watchlist":
+                recommendations = await personalized.get_watchlist_priority(
+                    profile=profile,
+                    content_type=content_type,
+                    library_items=library_items,
+                    limit=limit,
+                )
+            elif catalog_id == "watchly.recent":
+                recommendations = await personalized.get_recent_taste(
+                    content_type=content_type,
+                    library_items=library_items,
+                    watched_tmdb=watched_tmdb,
+                    watched_imdb=watched_imdb,
+                    limit=limit,
+                )
+            elif catalog_id == "watchly.hidden":
+                recommendations = await personalized.get_hidden_gems(
+                    profile=profile,
+                    content_type=content_type,
+                    watched_tmdb=watched_tmdb,
+                    watched_imdb=watched_imdb,
+                    limit=limit,
+                )
+            elif catalog_id == "watchly.different":
+                recommendations = await personalized.get_try_something_different(
+                    profile=profile,
+                    content_type=content_type,
+                    watched_tmdb=watched_tmdb,
+                    watched_imdb=watched_imdb,
+                    limit=limit,
+                )
+            else:
+                recommendations = await personalized.get_new_this_month(
+                    profile=profile,
+                    content_type=content_type,
+                    watched_tmdb=watched_tmdb,
+                    watched_imdb=watched_imdb,
+                    limit=limit,
+                )
+
+            logger.info(f"Found {len(recommendations)} recommendations for {catalog_id}")
 
         else:
             logger.warning(f"Unknown catalog ID: {catalog_id}")
