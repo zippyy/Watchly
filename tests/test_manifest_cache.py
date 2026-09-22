@@ -135,7 +135,6 @@ def test_dashboard_refresh_invalidates_the_manifest(fake_redis, count_builds):
     assert asyncio.run(user_cache.get_manifest(TOKEN)) is None
 
 
-
 def test_nuvio_only_manifest_still_generates_catalogs(fake_redis, monkeypatch):
     class FakeContext:
         auth_key = None
@@ -165,6 +164,4 @@ def test_nuvio_only_manifest_still_generates_catalogs(fake_redis, monkeypatch):
 
     manifest = asyncio.run(manifest_service.get_manifest_for_token("tok_nuvio_only", force_rebuild=True))
 
-    assert manifest["catalogs"] == [
-        {"id": "watchly.rec", "name": "Top Picks for You", "type": "movie"}
-    ]
+    assert manifest["catalogs"] == [{"id": "watchly.rec", "name": "Top Picks for You", "type": "movie"}]
