@@ -185,8 +185,7 @@ async def fetch_library_for_sources(
     # recovery of the selected providers in cache.
     if auth_key:
         logger.warning(
-            f"[{redact_token(token)}] No selected history source could be fetched; "
-            "falling back to Stremio library."
+            f"[{redact_token(token)}] No selected history source could be fetched; " "falling back to Stremio library."
         )
         return await bundle.library.get_library_items(auth_key)
 
