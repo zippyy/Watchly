@@ -16,6 +16,8 @@ def _manifest():
             {"type": "series", "id": "watchly.item.1", "name": "Because you loved Severance"},
             {"type": "movie", "id": "watchly.theme.1", "name": "Cerebral Sci-Fi"},
             {"type": "series", "id": "watchly.theme.1", "name": "Prestige Mystery"},
+            {"type": "movie", "id": "watchly.hidden", "name": "Hidden Gems for You"},
+            {"type": "series", "id": "watchly.hidden", "name": "Hidden Gems for You"},
         ],
     }
 
@@ -34,6 +36,20 @@ def test_build_nuvio_collection_is_deterministic_and_combines_static_rows():
         ("series", "watchly.rec"),
     }
     assert all(source["addonId"] == "com.bimal.watchly" for source in top_picks["sources"])
+
+
+
+def test_new_static_catalogs_combine_movie_and_series_in_nuvio():
+    collection = build_nuvio_collection(_manifest())
+    folders = {folder["id"]: folder for folder in collection["folders"]}
+
+    hidden = folders["watchly-hidden"]
+    assert hidden["title"] == "Hidden Gems for You"
+    assert hidden["coverEmoji"] == "💎"
+    assert {(source["type"], source["catalogId"]) for source in hidden["sources"]} == {
+        ("movie", "watchly.hidden"),
+        ("series", "watchly.hidden"),
+    }
 
 
 def test_dynamic_rows_are_kept_separate_by_media_type():
