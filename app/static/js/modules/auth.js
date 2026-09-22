@@ -12,7 +12,7 @@ import {
 import {
     setProviderConnected,
     setStremioConnected,
-    setWatchHistorySource,
+    setWatchHistorySources,
 } from './accounts.js';
 import { markFieldAsSaved } from './field-helpers.js';
 
@@ -608,9 +608,10 @@ function restoreWatchHistoryState(settings) {
         setProviderConnected('nuvio', true);
     }
 
-    if (settings.watch_history_source) {
-        setWatchHistorySource(settings.watch_history_source);
-    }
+    const savedSources = Array.isArray(settings.watch_history_sources) && settings.watch_history_sources.length
+        ? settings.watch_history_sources
+        : [settings.watch_history_source || 'stremio'];
+    setWatchHistorySources(savedSources);
 }
 
 async function validateAndShowTraktUser(accessToken) {
