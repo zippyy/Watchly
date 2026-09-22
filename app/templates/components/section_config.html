@@ -391,6 +391,29 @@
     </div>
     <div class="border-t border-white/10"></div>
 
+    <!-- Nuvio -> Simkl Watchlist Sync -->
+    <div class="space-y-4" id="nuvioSimklSyncCard">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+                <label class="block text-sm font-medium text-slate-400 uppercase tracking-wider">Nuvio → Simkl Watchlist Sync</label>
+                <p class="text-xs text-slate-500 mt-1">Automatically add unwatched titles from your Nuvio library to Simkl Plan to Watch. Requires both Nuvio and Simkl connected in Accounts.</p>
+            </div>
+            <button type="button" id="nuvioSimklSyncToggle"
+                class="px-4 py-2 text-sm font-medium rounded-lg border border-white/10 bg-neutral-900 text-slate-300 hover:text-white hover:bg-white/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                Enable
+            </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <button type="button" id="nuvioSimklSyncNow"
+                class="px-4 py-2 text-sm font-medium rounded-lg bg-white text-black hover:bg-white/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                Sync Now
+            </button>
+            <span id="nuvioSimklSyncStatus" class="text-xs text-slate-500">Load an existing Watchly account to manage sync.</span>
+        </div>
+        <div id="nuvioSimklSyncStats" class="hidden text-xs text-slate-500 bg-neutral-900/60 border border-white/10 rounded-xl p-3"></div>
+    </div>
+    <div class="border-t border-white/10"></div>
+
     <!-- AI / LLM Integration -->
     <div class="space-y-4">
         <label class="block text-sm font-medium text-slate-400 uppercase tracking-wider">AI Features
