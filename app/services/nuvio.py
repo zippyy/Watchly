@@ -52,6 +52,47 @@ class NuvioService:
         )
         return data if isinstance(data, list) else []
 
+    async def get_collections(self, access_token: str, profile_id: int) -> list[dict[str, Any]]:
+        """Fetch the complete Nuvio Collection snapshot for a profile."""
+        import json
+
+        rows = await self.client.post(
+            "/rest/v1/rpc/sync_pull_collections",
+            json={"p_profile_id": profile_id},
+            headers=self._headers(access_token),
+        )
+        blob = rows[0] if isinstance(rows, list) and rows else rows
+        value = blob.get("collections_json") if isinstance(blob, dict) else None
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+        if isinstance(value, str) and value.strip():
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise ValueError("Nuvio returned malformed collection data") from exc
+            if isinstance(parsed, list):
+                return [item for item in parsed if isinstance(item, dict)]
+        return []
+
+    async def push_collections(
+        self,
+        access_token: str,
+        profile_id: int,
+        collections: list[dict[str, Any]],
+        *,
+        origin_client_id: str,
+    ) -> None:
+        """Replace Nuvio's collection snapshot for a profile via the sync RPC."""
+        await self.client.post(
+            "/rest/v1/rpc/sync_push_collections",
+            json={
+                "p_profile_id": profile_id,
+                "p_collections_json": collections,
+                "p_origin_client_id": origin_client_id,
+            },
+            headers=self._headers(access_token),
+        )
+
     async def get_profile(self, access_token: str, profile_id: int) -> dict[str, Any] | None:
         profiles = await self.get_profiles(access_token)
         if not profiles and profile_id == 1:
