@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi.testclient import TestClient
 
 from app.core.app import app
@@ -140,3 +142,88 @@ def test_nuvio_catalog_alias_uses_existing_catalog_service(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["metas"][0]["id"] == "tt1234567"
+
+
+def test_auto_sync_replaces_only_existing_watchly_collection(monkeypatch):
+    from app.services import nuvio_collection_sync as sync_module
+
+    credentials = {
+        "settings": {
+            "nuvio_access_token": "access-token",
+            "nuvio_refresh_token": "refresh-token",
+            "nuvio_token_expires_at": 4102444800,
+            "nuvio_profile_id": 2,
+        }
+    }
+    existing_other = {"id": "my-other-collection", "title": "Keep Me", "folders": []}
+    existing_watchly = {"id": NUVIO_COLLECTION_ID, "title": "Old", "folders": [{"id": "old"}]}
+    pushed = {}
+
+    async def fake_resolve_alias(token):
+        return token
+
+    async def fake_get_user_data_fresh(token):
+        return credentials
+
+    async def fake_get_collections(access_token, profile_id):
+        assert access_token == "access-token"
+        assert profile_id == 2
+        return [existing_other, existing_watchly]
+
+    async def fake_push_collections(access_token, profile_id, collections, *, origin_client_id):
+        pushed["access_token"] = access_token
+        pushed["profile_id"] = profile_id
+        pushed["collections"] = collections
+        pushed["origin_client_id"] = origin_client_id
+
+    monkeypatch.setattr(sync_module.token_store, "resolve_alias", fake_resolve_alias)
+    monkeypatch.setattr(sync_module.token_store, "get_user_data_fresh", fake_get_user_data_fresh)
+    monkeypatch.setattr(sync_module.nuvio_service, "get_collections", fake_get_collections)
+    monkeypatch.setattr(sync_module.nuvio_service, "push_collections", fake_push_collections)
+
+    result = asyncio.run(sync_module.reconcile_existing_nuvio_collection("account-token", _manifest()))
+
+    assert result == "updated"
+    assert pushed["profile_id"] == 2
+    assert pushed["collections"][0] == existing_other
+    assert pushed["collections"][1]["id"] == NUVIO_COLLECTION_ID
+    assert pushed["collections"][1]["title"] == "For You"
+    assert pushed["origin_client_id"].startswith("watchly-server-")
+    assert "account-token" not in pushed["origin_client_id"]
+
+
+def test_auto_sync_never_creates_collection_implicitly(monkeypatch):
+    from app.services import nuvio_collection_sync as sync_module
+
+    credentials = {
+        "settings": {
+            "nuvio_access_token": "access-token",
+            "nuvio_refresh_token": "refresh-token",
+            "nuvio_token_expires_at": 4102444800,
+            "nuvio_profile_id": 1,
+        }
+    }
+    pushed = False
+
+    async def fake_resolve_alias(token):
+        return token
+
+    async def fake_get_user_data_fresh(token):
+        return credentials
+
+    async def fake_get_collections(access_token, profile_id):
+        return [{"id": "unrelated", "title": "Unrelated", "folders": []}]
+
+    async def fake_push_collections(*args, **kwargs):
+        nonlocal pushed
+        pushed = True
+
+    monkeypatch.setattr(sync_module.token_store, "resolve_alias", fake_resolve_alias)
+    monkeypatch.setattr(sync_module.token_store, "get_user_data_fresh", fake_get_user_data_fresh)
+    monkeypatch.setattr(sync_module.nuvio_service, "get_collections", fake_get_collections)
+    monkeypatch.setattr(sync_module.nuvio_service, "push_collections", fake_push_collections)
+
+    result = asyncio.run(sync_module.reconcile_existing_nuvio_collection("account-token", _manifest()))
+
+    assert result == "not-installed"
+    assert pushed is False
