@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.services.dashboard import dashboard_service
+from app.services.reroll import reroll_service
 
 router = APIRouter(tags=["Dashboard"])
 
@@ -30,5 +31,22 @@ async def refresh_recommendations(token: str):
         "detail": (
             "Fresh history and recommendations are rebuilding in the background. "
             "An existing Watchly Nuvio collection will be reconciled when the rebuild finishes."
+        ),
+    }
+
+
+@router.post("/{token}/reroll-recommendations")
+async def reroll_recommendations(token: str):
+    """Replace the currently served recommendation batches without changing taste history."""
+    status = await reroll_service.start(token)
+    if status == "not-found":
+        raise HTTPException(status_code=404, detail="Token not found. Please reconfigure the addon.")
+    if status == "already-running":
+        return {"status": "already-running", "detail": "A recommendation reroll is already in progress."}
+    return {
+        "status": "started",
+        "detail": (
+            "Current recommendation batches are being excluded and replaced with fresh alternatives. "
+            "The existing Nuvio For You collection will be reconciled when the reroll finishes."
         ),
     }
