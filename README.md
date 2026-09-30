@@ -43,7 +43,7 @@ For Stremio, Watchly behaves like a normal catalog addon. For **Nuvio**, this fo
 - **Poster ratings overlay** — optionally overlay IMDb/TMDb-style ratings on posters via [RatingPosterDB](https://ratingposterdb.com/), Top Posters, or a custom template.
 - **Bring your own keys** — supply your own TMDB, Simkl, or Gemini API keys, or rely on the server's.
 - **Secure by design** — credentials are encrypted at rest in Redis and never appear in the manifest URL, which carries only a short opaque token.
-- **Background sync** — catalogs are refreshed on a schedule so your home page is ready before you open it.
+- **Background sync** — after the refresh interval elapses, the next catalog request triggers a background refresh; Nuvio Collection Mode also reconciles its existing **For You** folder definitions during that refresh.
 - **Fast** — aggressive Redis caching of profiles, libraries, and rendered catalogs keeps responses quick.
 
 ## How it works
@@ -88,6 +88,8 @@ When you click **Install on Nuvio** from the Watchly configure page, Watchly:
 The resulting Collection is titled **For You** and is built from the recommendation catalogs you enabled in Watchly. Static rows such as **Watchlist Priority**, **Recent Taste**, **Hidden Gems for You**, **Try Something Different**, and **New This Month for You** are combined into one Nuvio folder with Movie and Series sources when both are enabled. Stable movie/series rows such as **Top Picks for You** are combined into one folder with Movie and Series tabs, while dynamic rows such as **Because you watched/loved** and generated themes remain separate when their names or seed data differ.
 
 Re-running **Install on Nuvio** is safe: the existing `watchly-for-you` Collection is updated instead of duplicated, and unrelated Nuvio Collections are preserved. Existing standard Watchly installs on that Nuvio profile are upgraded in place to Collection Mode.
+
+After Collection Mode has been installed once, Watchly can also keep its folder definitions synchronized automatically. When the normal catalog refresh becomes due and Nuvio requests a Watchly catalog, Watchly pulls fresh history, rebuilds the manifest, and replaces only the existing `watchly-for-you` Collection. This automatic write is enabled only when the same profile already has `watchly-for-you` **and** Watchly has a saved Nuvio session from connecting Nuvio as a history source; it never creates Collection Mode implicitly. Expired Nuvio access tokens are refreshed using the encrypted refresh token, so the Nuvio password is not stored.
 
 > **Privacy:** The **Install on Nuvio** flow signs in directly from your browser to Nuvio and does not send that install session to Watchly. If you separately connect **Nuvio as a watch-history source**, your Nuvio password still never reaches Watchly; only the selected profile plus Nuvio access/refresh tokens are sent on Save and encrypted at rest so Watchly can read history later.
 
