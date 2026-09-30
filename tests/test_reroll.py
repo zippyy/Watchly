@@ -38,8 +38,9 @@ def test_reroll_snapshots_current_batch_and_rebuilds(monkeypatch):
         assert (content_type, catalog_id) == ("movie", "watchly.rec")
         calls["invalidated"] += 1
 
-    async def rebuilt(_token, content_type, catalog_id):
+    async def rebuilt(_token, content_type, catalog_id, *, trigger_auto_update=True):
         assert (content_type, catalog_id) == ("movie", "watchly.rec")
+        assert trigger_auto_update is False
         return {
             "metas": [
                 {"id": "tt0000003", "type": "movie"},
