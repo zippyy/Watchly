@@ -40,7 +40,12 @@ class CatalogService:
         self._refresh_tasks: set[asyncio.Task] = set()
 
     async def get_catalog(
-        self, token: str, content_type: str, catalog_id: str
+        self,
+        token: str,
+        content_type: str,
+        catalog_id: str,
+        *,
+        trigger_auto_update: bool = True,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Get catalog recommendations."""
         self._validate_inputs(token, content_type, catalog_id)
@@ -66,7 +71,7 @@ class CatalogService:
         # re-configure last_updated carries over from the old record, so this would
         # otherwise fire a full manifest rebuild and Stremio push alongside the warm
         # that is already doing exactly that.
-        if settings.AUTO_UPDATE_CATALOGS and not await warmup_service.is_warming(token):
+        if trigger_auto_update and settings.AUTO_UPDATE_CATALOGS and not await warmup_service.is_warming(token):
             try:
                 await catalog_updater.trigger_update(token, credentials)
             except Exception as e:
