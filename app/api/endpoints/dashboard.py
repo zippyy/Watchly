@@ -1,13 +1,13 @@
-from fastapi import APIRouter, HTTPException
+from typing import Annotated\n\nfrom fastapi import APIRouter, HTTPException, Path
 
-from app.services.dashboard import dashboard_service
+from app.core.security import TOKEN_PATTERN\nfrom app.services.dashboard import dashboard_service
 from app.services.reroll import reroll_service
 
-router = APIRouter(tags=["Dashboard"])
+router = APIRouter(tags=["Dashboard"])\n\nTokenPath = Annotated[str, Path(pattern=TOKEN_PATTERN.pattern)]
 
 
 @router.get("/{token}/dashboard/data")
-async def dashboard_data(token: str):
+async def dashboard_data(token: TokenPath):
     data = await dashboard_service.get_data(token)
     if data is None:
         raise HTTPException(status_code=404, detail="Token not found. Please reconfigure the addon.")
@@ -15,14 +15,14 @@ async def dashboard_data(token: str):
 
 
 @router.post("/{token}/dashboard/refresh")
-async def dashboard_refresh(token: str):
+async def dashboard_refresh(token: TokenPath):
     if not await dashboard_service.refresh(token):
         raise HTTPException(status_code=404, detail="Token not found. Please reconfigure the addon.")
     return {"status": "started"}
 
 
 @router.post("/{token}/refresh-recommendations")
-async def refresh_recommendations(token: str):
+async def refresh_recommendations(token: TokenPath):
     """Force a fresh history/profile/catalog rebuild regardless of cache age."""
     if not await dashboard_service.refresh(token):
         raise HTTPException(status_code=404, detail="Token not found. Please reconfigure the addon.")
@@ -36,7 +36,7 @@ async def refresh_recommendations(token: str):
 
 
 @router.post("/{token}/reroll-recommendations")
-async def reroll_recommendations(token: str):
+async def reroll_recommendations(token: TokenPath):
     """Replace the currently served recommendation batches without changing taste history."""
     status = await reroll_service.start(token)
     if status == "not-found":
