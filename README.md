@@ -331,6 +331,8 @@ app/
 | `POST /tokens/` | Create a token from submitted credentials/settings. |
 | `GET /auth/trakt`, `GET /auth/simkl` | OAuth start; `/callback` variants complete the flow. |
 | `GET /{token}/dashboard/data` | User dashboard data. |
+| `POST /{token}/refresh-recommendations` | Force fresh history/profile/recommendation rebuild. |
+| `POST /{token}/reroll-recommendations` | Keep the current taste profile but replace the currently served recommendation batches with alternatives. |
 | `GET /health`, `GET /stats` | Readiness probe and usage stats. |
 
 ## Contributing

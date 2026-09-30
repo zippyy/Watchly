@@ -113,7 +113,10 @@ class DashboardService:
         if not credentials:
             return False
 
+        await user_cache.clear_reroll_exclusions(token)
         await user_cache.invalidate_all_user_data(token)
+        # Refresh returns to the strongest current picks; any temporary reroll
+        # exclusions are cleared above before the fresh history/profile rebuild.
         # This is an explicit user action, so bypass the normal refresh-age gate.
         # The updater still enforces its per-token concurrency lock.
         await catalog_updater.trigger_update(token, credentials, force=True)

@@ -11,6 +11,7 @@ from app.core.constants import (
     MANIFEST_KEY,
     PROFILE_KEY,
     PROFILE_SCORING_VERSION,
+    REROLL_EXCLUSIONS_KEY,
     USER_CACHE_TTL_SECONDS,
     WATCHED_SETS_KEY,
 )
@@ -105,6 +106,42 @@ class UserCacheService:
         payload = cache_codec.encode(json.dumps(mapping))
         await redis_service.set(self._row_map_key(token, content_type), payload, USER_CACHE_TTL_SECONDS)
         logger.debug(f"[{redact_token(token)}...] Stored {len(mapping)} row slots for {content_type}")
+
+    # Reroll exclusion Methods
+
+    @staticmethod
+    def _reroll_exclusions_key(token: str) -> str:
+        return REROLL_EXCLUSIONS_KEY.format(token=token)
+
+    async def get_reroll_exclusions(self, token: str, content_type: str, catalog_id: str) -> set[str]:
+        """IMDb ids from the batches rejected by the most recent reroll."""
+        cached = await redis_service.get(self._reroll_exclusions_key(token))
+        if not cached:
+            return set()
+        try:
+            values = json.loads(cache_codec.decode(cached))
+            return {
+                value
+                for value in values.get(content_type, {}).get(catalog_id, [])
+                if isinstance(value, str) and value.startswith("tt")
+            }
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            return set()
+
+    async def set_reroll_exclusions(self, token: str, exclusions: dict[str, dict[str, set[str]]]) -> None:
+        """Store one atomic per-token snapshot so concurrent row rebuilds cannot race."""
+        payload = {
+            content_type: {catalog_id: sorted(imdb_ids) for catalog_id, imdb_ids in catalogs.items()}
+            for content_type, catalogs in exclusions.items()
+        }
+        await redis_service.set(
+            self._reroll_exclusions_key(token),
+            cache_codec.encode(json.dumps(payload)),
+            24 * 60 * 60,
+        )
+
+    async def clear_reroll_exclusions(self, token: str) -> None:
+        await redis_service.delete(self._reroll_exclusions_key(token))
 
     # Library Items Methods
 

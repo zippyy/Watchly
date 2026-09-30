@@ -26,6 +26,8 @@ LIBRARY_ITEMS_KEY: str = "watchly:library_items:{token}"
 PROFILE_KEY: str = "watchly:profile:{token}:{content_type}"
 WATCHED_SETS_KEY: str = "watchly:watched_sets:{token}:{content_type}"
 CATALOG_KEY: str = "watchly:catalog:{token}:{type}:{id}"
+REROLL_EXCLUSIONS_KEY: str = "watchly:reroll:v1:{token}"
+REROLL_LOCK_KEY: str = "watchly:rerolllock:{token}"
 # Versioned because the manifest embeds the addon version: a deploy orphans the old
 # entries rather than serving a stale version string until the TTL runs out.
 MANIFEST_KEY: str = "watchly:manifest:{version}:{token}"

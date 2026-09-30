@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.14.15 - 2026-09-30
+
+### Added
+
+- Added **Reroll Recommendations** to the Dashboard for the "these picks are good, but give me different ones" case. Reroll keeps the current watch history and taste profile, remembers each currently served catalog batch, temporarily excludes those IMDb IDs, and eagerly rebuilds the rows with additional candidate headroom.
+- Added `POST /{token}/reroll-recommendations` for scripted rerolls.
+- Rerolls rebuild enabled movie/series catalogs in the background with bounded concurrency and reconcile an existing native Nuvio **For You** collection after the new server-side catalog caches are ready.
+
+### Changed
+
+- Reroll exclusions expire after 24 hours, so rejected batches are not permanently banned from future recommendation cycles.
+- A full **Refresh Recommendations** clears any reroll exclusions first, restoring Watchly's strongest picks from freshly pulled history.
+
 ## 1.14.14 - 2026-09-30
 
 ### Added
