@@ -106,6 +106,42 @@ class UserCacheService:
         await redis_service.set(self._row_map_key(token, content_type), payload, USER_CACHE_TTL_SECONDS)
         logger.debug(f"[{redact_token(token)}...] Stored {len(mapping)} row slots for {content_type}")
 
+    # Reroll exclusion Methods
+
+    @staticmethod
+    def _reroll_exclusions_key(token: str, content_type: str, catalog_id: str) -> str:
+        return f"watchly:reroll:v1:{token}:{content_type}:{catalog_id}"
+
+    async def get_reroll_exclusions(self, token: str, content_type: str, catalog_id: str) -> set[str]:
+        """IMDb ids from the batch immediately preceding a user-requested reroll."""
+        cached = await redis_service.get(self._reroll_exclusions_key(token, content_type, catalog_id))
+        if not cached:
+            return set()
+        try:
+            values = json.loads(cache_codec.decode(cached))
+            return {value for value in values if isinstance(value, str) and value.startswith("tt")}
+        except (json.JSONDecodeError, TypeError):
+            return set()
+
+    async def set_reroll_exclusions(
+        self, token: str, content_type: str, catalog_id: str, imdb_ids: set[str]
+    ) -> None:
+        """Replace the previous reroll batch.
+
+        The exclusion is intentionally short-lived: reroll means "show me something
+        else now", not "ban these titles forever". Normal daily refreshes may bring
+        a strong recommendation back later.
+        """
+        key = self._reroll_exclusions_key(token, content_type, catalog_id)
+        if not imdb_ids:
+            await redis_service.delete(key)
+            return
+        payload = cache_codec.encode(json.dumps(sorted(imdb_ids)))
+        await redis_service.set(key, payload, 24 * 60 * 60)
+
+    async def clear_reroll_exclusions(self, token: str) -> None:
+        await redis_service.delete_by_pattern(f"watchly:reroll:v1:{token}:*")
+
     # Library Items Methods
 
     async def get_library_items(self, token: str) -> LibraryCollection | None:
