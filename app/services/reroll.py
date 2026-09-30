@@ -79,7 +79,7 @@ class RerollService:
                     await user_cache.set_reroll_exclusions(token, content_type, catalog_id, current_ids)
                     await user_cache.invalidate_catalog(token, content_type, catalog_id)
 
-                    data, _ = await catalog_service.get_catalog(token, content_type, catalog_id)
+                    data, _ = await catalog_service.get_catalog(\n                        token, content_type, catalog_id, trigger_auto_update=False\n                    )
                     new_ids = {
                         item.get("id")
                         for item in data.get("metas", [])
