@@ -94,6 +94,20 @@ class CatalogUpdater:
             manifest = await manifest_service.get_manifest_for_token(token, force_rebuild=True)
             catalogs = manifest.get("catalogs", [])
 
+            # If this profile already has Watchly's native Nuvio Collection and
+            # Watchly has a saved Nuvio session (from the history connection),
+            # keep the Collection's folder definitions in sync with the freshly
+            # rebuilt manifest. This never creates Collection Mode implicitly.
+            try:
+                from app.services.nuvio_collection_sync import reconcile_existing_nuvio_collection
+
+                nuvio_result = await reconcile_existing_nuvio_collection(token, manifest)
+                logger.debug(f"[{redact_token(token)}] Nuvio collection reconcile: {nuvio_result}")
+            except Exception as e:
+                # Nuvio sync is independent of Stremio catalog refresh. A Nuvio
+                # outage must not turn an otherwise successful refresh into a failure.
+                logger.warning(f"[{redact_token(token)}] Nuvio collection auto-sync failed: {e}")
+
             if auth_key:
                 success = await bundle.addons.update_catalogs(auth_key, catalogs)
             else:
