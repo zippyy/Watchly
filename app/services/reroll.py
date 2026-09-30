@@ -29,7 +29,7 @@ class RerollService:
         except asyncio.CancelledError:
             return
         if exc is not None:
-            logger.error(f"Recommendation reroll task crashed: {exc!r}")
+            logger.error(f"Recommendation reroll task crashed ({type(exc).__name__})")
 
     async def start(self, token: str) -> str:
         token = await token_store.resolve_alias(token)
@@ -105,13 +105,13 @@ class RerollService:
             for result in results:
                 if isinstance(result, Exception):
                     failures += 1
-                    logger.warning(f"[{redact_token(token)}] Catalog reroll failed: {result}")
+                    logger.warning(f"[{redact_token(token)}] Catalog reroll failed ({type(result).__name__})")
 
             try:
                 nuvio_result = await reconcile_existing_nuvio_collection(token, manifest)
                 logger.debug(f"[{redact_token(token)}] Nuvio collection reroll reconcile: {nuvio_result}")
             except Exception as exc:
-                logger.warning(f"[{redact_token(token)}] Nuvio collection reroll sync failed: {exc}")
+                logger.warning(f"[{redact_token(token)}] Nuvio collection reroll sync failed ({type(exc).__name__})")
 
             logger.info(
                 f"[{redact_token(token)}] Recommendation reroll complete: "
