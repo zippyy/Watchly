@@ -226,9 +226,9 @@ class CatalogService:
             )
 
             if reroll_exclusions:
-                recommendations = [
-                    item for item in recommendations if item.get("id") not in reroll_exclusions
-                ][:DEFAULT_CATALOG_LIMIT]
+                recommendations = [item for item in recommendations if item.get("id") not in reroll_exclusions][
+                    :DEFAULT_CATALOG_LIMIT
+                ]
 
             logger.debug(f"Returning {len(recommendations)} items for {content_type}")
 
