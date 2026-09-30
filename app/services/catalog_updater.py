@@ -149,21 +149,25 @@ class CatalogUpdater:
         finally:
             await bundle.close()
 
-    async def trigger_update(self, token: str, credentials: dict[str, Any]) -> None:
-        """Fire a background catalog update if needed. In-memory lock prevents duplicates."""
+    async def trigger_update(self, token: str, credentials: dict[str, Any], *, force: bool = False) -> bool:
+        """Fire a background catalog update, optionally bypassing the age gate.
+
+        Returns True when a refresh was started and False when one was skipped.
+        """
         if token in self._updating_tokens:
             logger.debug(f"[{redact_token(token)}] Update already in progress, skipping")
-            return
+            return False
 
-        if not self._needs_update(credentials):
+        if not force and not self._needs_update(credentials):
             logger.debug(f"[{redact_token(token)}] Catalog update not needed yet")
-            return
+            return False
 
         self._updating_tokens.add(token)
         logger.info(f"[{redact_token(token)}] Triggering catalog update")
         task = asyncio.create_task(self._update_task(token, credentials))
         self._pending_tasks.add(task)
         task.add_done_callback(self._on_task_done)
+        return True
 
     async def _update_task(self, token: str, credentials: dict[str, Any]) -> None:
         """Background task that performs the actual catalog update."""
