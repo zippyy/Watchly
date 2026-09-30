@@ -31,6 +31,7 @@ export function initializeDashboard(actions, state) {
     wireCopy();
     wireNuvioInstall();
     wireRefresh();
+    wireReroll();
     wireProfileTabs();
     wireCatalogFilter();
 }
@@ -430,6 +431,37 @@ function wireRefresh() {
             const res = await fetch(`/${appState.auth.token}/refresh-recommendations`, { method: 'POST' });
             if (!res.ok) throw new Error('Refresh failed. Please try again.');
             msg.textContent = 'Fresh history is loading and recommendations are rebuilding now. Your Nuvio For You collection will update automatically when it finishes.';
+            msg.classList.remove('hidden', 'text-red-400');
+            msg.classList.add('text-emerald-300');
+        } catch (e) {
+            msg.textContent = e.message;
+            msg.classList.remove('hidden', 'text-emerald-300');
+            msg.classList.add('text-red-400');
+        } finally {
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            btn.textContent = original;
+        }
+    });
+}
+
+function wireReroll() {
+    const btn = $('dashRerollBtn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+        if (!appState || !appState.auth.token) return;
+        const msg = $('dashRefreshMsg');
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        const original = btn.textContent;
+        btn.textContent = 'Rerolling…';
+        try {
+            const res = await fetch(`/${appState.auth.token}/reroll-recommendations`, { method: 'POST' });
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(payload.detail || 'Reroll failed. Please try again.');
+            msg.textContent = payload.status === 'already-running'
+                ? 'A reroll is already running.'
+                : 'Reroll started — Watchly is excluding the current batches and building different picks for Nuvio and Stremio.';
             msg.classList.remove('hidden', 'text-red-400');
             msg.classList.add('text-emerald-300');
         } catch (e) {
