@@ -105,16 +105,22 @@
                             <p id="dashEmail" class="text-base text-white font-semibold truncate"></p>
                         </div>
                     </div>
-                    <button type="button" id="dashRefreshBtn"
-                        class="group flex items-center gap-2 text-sm border border-slate-700 rounded-xl px-3.5 py-2 text-slate-300 hover:text-white hover:bg-white/5 transition-colors flex-shrink-0">
-                        <svg id="dashRefreshIcon" class="w-4 h-4 group-hover:rotate-180 transition-transform duration-500"
-                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
-                            </path>
-                        </svg>
-                        <span class="hidden sm:inline">Refresh Recommendations</span>
-                    </button>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <button type="button" id="dashRerollBtn"
+                            class="text-sm border border-purple-500/30 bg-purple-500/10 rounded-xl px-3.5 py-2 text-purple-200 hover:text-white hover:bg-purple-500/20 transition-colors">
+                            Reroll
+                        </button>
+                        <button type="button" id="dashRefreshBtn"
+                            class="group flex items-center gap-2 text-sm border border-slate-700 rounded-xl px-3.5 py-2 text-slate-300 hover:text-white hover:bg-white/5 transition-colors">
+                            <svg id="dashRefreshIcon" class="w-4 h-4 group-hover:rotate-180 transition-transform duration-500"
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                                </path>
+                            </svg>
+                            <span class="hidden sm:inline">Refresh Recommendations</span>
+                        </button>
+                    </div>
                 </div>
 
                 <p class="text-[11px] font-medium text-slate-500 uppercase tracking-wider mb-2">Manifest URL</p>
