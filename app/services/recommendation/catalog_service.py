@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from loguru import logger
 
 from app.core.config import settings
-from app.core.constants import DEFAULT_CATALOG_LIMIT
+from app.core.constants import DEFAULT_CATALOG_LIMIT, MAX_CATALOG_ITEMS
 from app.core.security import redact_token
 from app.core.settings import UserSettings, resolve_tmdb_api_key, watch_history_source_key
 from app.models.library import LibraryCollection
@@ -196,6 +196,16 @@ class CatalogService:
                     user_settings=ctx.user_settings,
                 )
 
+            # A reroll remembers the batch that was visible immediately before
+            # the user clicked Reroll. Ask each engine for enough headroom to get
+            # past that batch, then remove those IMDb ids after enrichment. This
+            # changes the actual selection instead of merely shuffling the same 20.
+            reroll_exclusions = await user_cache.get_reroll_exclusions(ctx.token, content_type, catalog_id)
+            recommendation_limit = min(
+                MAX_CATALOG_ITEMS,
+                DEFAULT_CATALOG_LIMIT + len(reroll_exclusions),
+            )
+
             # Resolved only for building. The cache key stays the slot id the client
             # asked for, which is the whole point: it survives a definition change.
             recommendations = await self._get_recommendations(
@@ -206,9 +216,14 @@ class CatalogService:
                 watched_tmdb=watched_tmdb,
                 watched_imdb=watched_imdb,
                 library_items=ctx.library,
-                limit=DEFAULT_CATALOG_LIMIT,
+                limit=recommendation_limit,
                 user_settings=ctx.user_settings,
             )
+
+            if reroll_exclusions:
+                recommendations = [
+                    item for item in recommendations if item.get("id") not in reroll_exclusions
+                ][:DEFAULT_CATALOG_LIMIT]
 
             logger.debug(f"Returning {len(recommendations)} items for {content_type}")
 
