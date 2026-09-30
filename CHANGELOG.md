@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.14.13 - 2026-09-30
+
+### Added
+
+- Existing native Nuvio **For You** collections now reconcile automatically when Watchly performs its catalog refresh, using the already-stored Nuvio history session and preserving every unrelated collection.
+- Automatic collection reconciliation is deliberately non-creating: connecting Nuvio history alone never opts a profile into Collection Mode.
+- Nuvio collection sync refreshes expired Supabase sessions and persists rotated access/refresh tokens without storing the user's Nuvio password.
+
+### Fixed
+
+- Scheduled catalog refreshes now invalidate the long-lived library snapshot before rebuilding, so the nominal daily refresh actually pulls current watch history instead of potentially reusing the 90-day sliding library cache.
+
 ## 1.14.12 - 2026-09-22
 
 ### Fixed

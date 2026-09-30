@@ -84,15 +84,34 @@ class CatalogUpdater:
                     logger.exception(f"[{redact_token(token)}] Failed to check addon install status: {e}")
                     return False
 
-            # Reuse ManifestService to build catalogs
-            # (handles library caching, profile building, catalog definitions,
-            #  translation, and sorting — no need to reimplement here)
+            # Reuse ManifestService to build catalogs. The library cache has a
+            # long sliding TTL for request performance, so explicitly drop it at
+            # the refresh boundary; otherwise a "daily" update can keep rebuilding
+            # from weeks-old watch history. set_library_items() will invalidate
+            # rendered catalogs after the fresh provider snapshot is fetched.
             from app.services.manifest import manifest_service
+            from app.services.user_cache import user_cache
+
+            await user_cache.invalidate_library_items(token)
 
             # Force a rebuild: this job exists to push a *fresh* catalog list to
             # Stremio, so reading the manifest cache would make it a no-op.
             manifest = await manifest_service.get_manifest_for_token(token, force_rebuild=True)
             catalogs = manifest.get("catalogs", [])
+
+            # If this profile already has Watchly's native Nuvio Collection and
+            # Watchly has a saved Nuvio session (from the history connection),
+            # keep the Collection's folder definitions in sync with the freshly
+            # rebuilt manifest. This never creates Collection Mode implicitly.
+            try:
+                from app.services.nuvio_collection_sync import reconcile_existing_nuvio_collection
+
+                nuvio_result = await reconcile_existing_nuvio_collection(token, manifest)
+                logger.debug(f"[{redact_token(token)}] Nuvio collection reconcile: {nuvio_result}")
+            except Exception as e:
+                # Nuvio sync is independent of Stremio catalog refresh. A Nuvio
+                # outage must not turn an otherwise successful refresh into a failure.
+                logger.warning(f"[{redact_token(token)}] Nuvio collection auto-sync failed: {e}")
 
             if auth_key:
                 success = await bundle.addons.update_catalogs(auth_key, catalogs)
