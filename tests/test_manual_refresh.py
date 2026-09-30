@@ -30,7 +30,6 @@ def test_manual_refresh_forces_update_even_when_not_due(monkeypatch):
         calls["force"] = force
         return True
 
-    monkeypatch.setattr(dashboard_service.__class__, "refresh", dashboard_service.__class__.refresh)
     monkeypatch.setattr("app.services.dashboard.token_store.resolve_alias", resolve_alias)
     monkeypatch.setattr("app.services.dashboard.token_store.get_user_data", get_user_data)
     monkeypatch.setattr("app.services.dashboard.user_cache.invalidate_all_user_data", invalidate)
