@@ -84,10 +84,15 @@ class CatalogUpdater:
                     logger.exception(f"[{redact_token(token)}] Failed to check addon install status: {e}")
                     return False
 
-            # Reuse ManifestService to build catalogs
-            # (handles library caching, profile building, catalog definitions,
-            #  translation, and sorting — no need to reimplement here)
+            # Reuse ManifestService to build catalogs. The library cache has a
+            # long sliding TTL for request performance, so explicitly drop it at
+            # the refresh boundary; otherwise a "daily" update can keep rebuilding
+            # from weeks-old watch history. set_library_items() will invalidate
+            # rendered catalogs after the fresh provider snapshot is fetched.
             from app.services.manifest import manifest_service
+            from app.services.user_cache import user_cache
+
+            await user_cache.invalidate_library_items(token)
 
             # Force a rebuild: this job exists to push a *fresh* catalog list to
             # Stremio, so reading the manifest cache would make it a no-op.
