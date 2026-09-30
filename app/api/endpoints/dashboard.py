@@ -1,9 +1,14 @@
-from typing import Annotated\n\nfrom fastapi import APIRouter, HTTPException, Path
+from typing import Annotated
 
-from app.core.security import TOKEN_PATTERN\nfrom app.services.dashboard import dashboard_service
+from fastapi import APIRouter, HTTPException, Path
+
+from app.core.security import TOKEN_PATTERN
+from app.services.dashboard import dashboard_service
 from app.services.reroll import reroll_service
 
-router = APIRouter(tags=["Dashboard"])\n\nTokenPath = Annotated[str, Path(pattern=TOKEN_PATTERN.pattern)]
+router = APIRouter(tags=["Dashboard"])
+
+TokenPath = Annotated[str, Path(pattern=TOKEN_PATTERN.pattern)]
 
 
 @router.get("/{token}/dashboard/data")
