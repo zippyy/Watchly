@@ -64,9 +64,7 @@ class RerollService:
                 exclusions[content_type][catalog_id] = {
                     item["id"]
                     for item in current_metas
-                    if isinstance(item, dict)
-                    and isinstance(item.get("id"), str)
-                    and item["id"].startswith("tt")
+                    if isinstance(item, dict) and isinstance(item.get("id"), str) and item["id"].startswith("tt")
                 }
 
             await user_cache.set_reroll_exclusions(token, exclusions)
