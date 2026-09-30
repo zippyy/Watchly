@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.14.14 - 2026-09-30
+
+### Added
+
+- Dashboard **Refresh Recommendations** now provides an explicit manual rerun path that immediately invalidates the saved library/profile/catalog caches, pulls current history, rebuilds recommendations, and reconciles an existing native Nuvio **For You** collection when the rebuild finishes.
+- Added `POST /{token}/refresh-recommendations` for the same forced refresh from scripts or `curl`.
+
+### Fixed
+
+- The previous dashboard Refresh action could clear caches and then have `CatalogUpdater` skip the requested rebuild because the normal 23–24 hour age gate said the account was not due yet. Manual refreshes now explicitly bypass that age gate while retaining the per-token concurrency lock.
+
 ## 1.14.13 - 2026-09-30
 
 ### Added
