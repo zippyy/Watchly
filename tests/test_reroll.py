@@ -30,9 +30,8 @@ def test_reroll_snapshots_current_batch_and_rebuilds(monkeypatch):
             123,
         )
 
-    async def set_exclusions(_token, content_type, catalog_id, ids):
-        assert (content_type, catalog_id) == ("movie", "watchly.rec")
-        calls["excluded"] = ids
+    async def set_exclusions(_token, exclusions):
+        calls["excluded"] = exclusions
 
     async def invalidate(_token, content_type, catalog_id):
         assert (content_type, catalog_id) == ("movie", "watchly.rec")
@@ -67,7 +66,10 @@ def test_reroll_snapshots_current_batch_and_rebuilds(monkeypatch):
 
     asyncio.run(reroll_service._run("abc", "reroll-lock"))
 
-    assert calls["excluded"] == {"tt0000001", "tt0000002"}
+    assert calls["excluded"] == {
+        "movie": {"watchly.rec": {"tt0000001", "tt0000002"}},
+        "series": {},
+    }
     assert calls["invalidated"] == 1
     assert calls["reconciled"] == 1
     assert calls["lock_deleted"] == 1
