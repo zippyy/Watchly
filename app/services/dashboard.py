@@ -114,7 +114,9 @@ class DashboardService:
             return False
 
         await user_cache.invalidate_all_user_data(token)
-        await catalog_updater.trigger_update(token, credentials)
+        # This is an explicit user action, so bypass the normal refresh-age gate.
+        # The updater still enforces its per-token concurrency lock.
+        await catalog_updater.trigger_update(token, credentials, force=True)
         return True
 
 

@@ -427,9 +427,9 @@ function wireRefresh() {
         const original = btn.textContent;
         btn.textContent = 'Refreshing…';
         try {
-            const res = await fetch(`/${appState.auth.token}/dashboard/refresh`, { method: 'POST' });
+            const res = await fetch(`/${appState.auth.token}/refresh-recommendations`, { method: 'POST' });
             if (!res.ok) throw new Error('Refresh failed. Please try again.');
-            msg.textContent = 'Refresh started — your catalogs will rebuild on the next open in Stremio.';
+            msg.textContent = 'Fresh history is loading and recommendations are rebuilding now. Your Nuvio For You collection will update automatically when it finishes.';
             msg.classList.remove('hidden', 'text-red-400');
             msg.classList.add('text-emerald-300');
         } catch (e) {
