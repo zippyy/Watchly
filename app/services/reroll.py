@@ -3,6 +3,7 @@ from typing import Any
 
 from loguru import logger
 
+from app.core.constants import REROLL_LOCK_KEY
 from app.core.security import redact_token
 from app.services.manifest import manifest_service
 from app.services.nuvio_collection_sync import reconcile_existing_nuvio_collection
@@ -11,20 +12,12 @@ from app.services.redis_service import redis_service
 from app.services.token_store import token_store
 from app.services.user_cache import user_cache
 
-REROLL_LOCK_PREFIX = "watchly:rerolllock:"
 REROLL_LOCK_TTL_SECONDS = 30 * 60
 REROLL_CONCURRENCY = 3
 
 
 class RerollService:
-    """Replace currently served recommendations with a different batch.
-
-    Reroll deliberately keeps the user's current library and taste profile. It
-    snapshots the IMDb ids in each rendered catalog, stores those ids as temporary
-    exclusions, invalidates that row, then eagerly rebuilds it with extra candidate
-    headroom. A later full Refresh clears these exclusions and returns to the
-    strongest recommendations for the latest history.
-    """
+    """Replace currently served recommendations while keeping the current taste profile."""
 
     def __init__(self) -> None:
         self._pending_tasks: set[asyncio.Task] = set()
@@ -44,7 +37,7 @@ class RerollService:
         if not credentials:
             return "not-found"
 
-        lock_key = f"{REROLL_LOCK_PREFIX}{token}"
+        lock_key = REROLL_LOCK_KEY.format(token=token)
         if not await redis_service.set_nx(lock_key, "1", REROLL_LOCK_TTL_SECONDS):
             return "already-running"
 
@@ -62,36 +55,45 @@ class RerollService:
                 if catalog.get("type") in {"movie", "series"} and catalog.get("id")
             ]
 
+            current_rows = await asyncio.gather(
+                *(user_cache.get_catalog(token, content_type, catalog_id) for content_type, catalog_id in catalogs)
+            )
+            exclusions: dict[str, dict[str, set[str]]] = {"movie": {}, "series": {}}
+            for (content_type, catalog_id), current in zip(catalogs, current_rows, strict=True):
+                current_metas = current[0].get("metas", []) if current else []
+                exclusions[content_type][catalog_id] = {
+                    item["id"]
+                    for item in current_metas
+                    if isinstance(item, dict)
+                    and isinstance(item.get("id"), str)
+                    and item["id"].startswith("tt")
+                }
+
+            await user_cache.set_reroll_exclusions(token, exclusions)
+
             semaphore = asyncio.Semaphore(REROLL_CONCURRENCY)
 
             async def reroll_one(content_type: str, catalog_id: str) -> dict[str, Any]:
                 async with semaphore:
-                    current = await user_cache.get_catalog(token, content_type, catalog_id)
-                    current_metas = current[0].get("metas", []) if current else []
-                    current_ids = {
-                        item.get("id")
-                        for item in current_metas
-                        if isinstance(item, dict)
-                        and isinstance(item.get("id"), str)
-                        and item["id"].startswith("tt")
-                    }
-
-                    await user_cache.set_reroll_exclusions(token, content_type, catalog_id, current_ids)
+                    current_ids = exclusions[content_type][catalog_id]
                     await user_cache.invalidate_catalog(token, content_type, catalog_id)
-
-                    data, _ = await catalog_service.get_catalog(\n                        token, content_type, catalog_id, trigger_auto_update=False\n                    )
+                    data, _ = await catalog_service.get_catalog(
+                        token,
+                        content_type,
+                        catalog_id,
+                        trigger_auto_update=False,
+                    )
                     new_ids = {
-                        item.get("id")
+                        item["id"]
                         for item in data.get("metas", [])
                         if isinstance(item, dict) and isinstance(item.get("id"), str)
                     }
-                    overlap = len(current_ids & new_ids)
                     return {
                         "type": content_type,
                         "id": catalog_id,
                         "previous": len(current_ids),
                         "new": len(new_ids),
-                        "overlap": overlap,
+                        "overlap": len(current_ids & new_ids),
                     }
 
             results = await asyncio.gather(
@@ -105,9 +107,6 @@ class RerollService:
                     failures += 1
                     logger.warning(f"[{redact_token(token)}] Catalog reroll failed: {result}")
 
-            # Folder definitions do not change, but replacing the existing Watchly
-            # collection nudges connected Nuvio clients to reconcile the collection
-            # after the freshly rendered catalog caches are ready.
             try:
                 nuvio_result = await reconcile_existing_nuvio_collection(token, manifest)
                 logger.debug(f"[{redact_token(token)}] Nuvio collection reroll reconcile: {nuvio_result}")
